@@ -1,0 +1,4681 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>学習ジャーニーマップ作成ツール</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <style>
+        /* パフォーマンス最適化のためのベーススタイル */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        /* ハードウェアアクセラレーションの活用 */
+        .journey-item.dragging,
+        .modal,
+        .drop-indicator {
+            will-change: transform, opacity;
+            transform: translateZ(0);
+        }
+        
+        /* スムーズなスクロール */
+        html {
+            scroll-behavior: smooth;
+        }
+        
+        /* フォントレンダリングの最適化 */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            text-rendering: optimizeSpeed;
+        }
+        
+        /* メインコンテナの最適化 */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+            contain: layout style;
+        }
+
+        .header {
+            background: linear-gradient(90deg, #4f46e5, #7c3aed);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 16px;
+        }
+
+        .controls {
+            background: #f8fafc;
+            padding: 20px 30px;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .control-group label {
+            font-size: 14px;
+            font-weight: 600;
+            color: #475569;
+        }
+
+        .select-input, .text-input {
+            padding: 8px 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .select-input:focus, .text-input:focus {
+            border-color: #4f46e5;
+        }
+
+        .btn {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(90deg, #4f46e5, #7c3aed);
+            color: white;
+            box-shadow: 0 4px 15px rgba(79, 70, 229, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(79, 70, 229, 0.4);
+        }
+
+        .btn-secondary {
+            background: #f1f5f9;
+            color: #64748b;
+            border: 1px solid #e2e8f0;
+        }
+
+        .btn-secondary:hover {
+            background: #e2e8f0;
+        }
+
+        .btn-warning {
+            background: linear-gradient(90deg, #f59e0b, #d97706);
+            color: white;
+            box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);
+        }
+
+        .btn-warning:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(245, 158, 11, 0.4);
+        }
+
+        .btn-danger {
+            background: linear-gradient(90deg, #ef4444, #dc2626);
+            color: white;
+            box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            min-height: 700px;
+        }
+
+        .sidebar {
+            background: #f8fafc;
+            border-right: 1px solid #e2e8f0;
+            padding: 20px;
+            overflow-y: auto;
+            max-height: calc(100vh - 200px);
+        }
+
+        .sidebar h3 {
+            color: #1e293b;
+            margin-bottom: 16px;
+            font-size: 16px;
+        }
+
+        .timeline-controls {
+            margin-bottom: 24px;
+        }
+
+        .phase-item {
+            background: white;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 8px;
+            border: 2px solid transparent;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .phase-item:hover {
+            border-color: #4f46e5;
+        }
+
+        .phase-item.active {
+            border-color: #4f46e5;
+            background: #eef2ff;
+        }
+
+        .phase-title {
+            font-weight: 600;
+            color: #1e293b;
+            font-size: 14px;
+        }
+
+        .touchpoint-library {
+            margin-bottom: 24px;
+        }
+
+        .touchpoint-category {
+            margin-bottom: 12px;
+        }
+
+        .category-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #475569;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .touchpoint-item {
+            background: white;
+            border-radius: 6px;
+            padding: 8px 10px;
+            margin-bottom: 4px;
+            font-size: 13px;
+            cursor: pointer;
+            border: 1px solid #e2e8f0;
+            transition: all 0.2s;
+        }
+
+        .touchpoint-item:hover {
+            background: #f1f5f9;
+            border-color: #4f46e5;
+        }
+
+        /* ドラッグ&ドロップ関連スタイル */
+        .draggable {
+            cursor: grab;
+        }
+
+        .draggable:active {
+            cursor: grabbing;
+        }
+
+        .dragging {
+            opacity: 0.5;
+            transform: rotate(5deg);
+            z-index: 1000;
+        }
+
+        .drag-over {
+            border: 2px solid #4f46e5 !important;
+            background: rgba(79, 70, 229, 0.1) !important;
+        }
+
+        .drop-zone {
+            min-height: 100px;
+            border: 2px dashed #cbd5e1;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #64748b;
+            font-size: 12px;
+            margin: 4px 0;
+            transition: all 0.3s ease;
+        }
+
+        .drop-zone.active {
+            border-color: #4f46e5;
+            background: rgba(79, 70, 229, 0.05);
+            color: #4f46e5;
+        }
+
+        .drop-indicator {
+            height: 2px;
+            background: #4f46e5;
+            margin: 2px 0;
+            border-radius: 1px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .drop-indicator.show {
+            opacity: 1;
+        }
+
+        .journey-item.draggable {
+            cursor: grab;
+        }
+
+        .journey-item.draggable:active {
+            cursor: grabbing;
+        }
+
+        /* Visualization Styles */
+        .visualization-section {
+            margin: 20px 0;
+            padding: 20px;
+            background: #f8fafc;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .visualization-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .visualization-modal {
+            max-width: 95vw;
+            width: auto;
+            min-width: 800px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        @media (max-width: 1400px) {
+            .visualization-modal {
+                max-width: 90vw;
+                min-width: 700px;
+            }
+        }
+
+        @media (max-width: 900px) {
+            .visualization-modal {
+                max-width: 95vw;
+                min-width: 320px;
+                padding: 10px;
+            }
+        }
+
+        .chart-tabs {
+            display: flex;
+            border-bottom: 2px solid #ddd;
+            margin-bottom: 20px;
+            overflow-x: auto;
+            flex-wrap: nowrap;
+        }
+
+        @media (max-width: 900px) {
+            .chart-tabs {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+        }
+
+        .tab-btn {
+            background: none;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-size: 14px;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s ease;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        @media (max-width: 600px) {
+            .tab-btn {
+                padding: 8px 12px;
+                font-size: 12px;
+            }
+        }
+
+        .tab-btn:hover {
+            background-color: #f0f0f0;
+        }
+
+        .tab-btn.active {
+            border-bottom-color: #007bff;
+            color: #007bff;
+            font-weight: bold;
+        }
+
+        .chart-container {
+            position: relative;
+            width: 100%;
+        }
+
+        .chart-canvas-container {
+            position: relative;
+            width: 100%;
+            height: 500px;
+            min-height: 400px;
+            max-height: 600px;
+        }
+
+        .chart-canvas-container canvas {
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        @media (max-width: 1200px) {
+            .chart-canvas-container {
+                height: 450px;
+            }
+        }
+
+        @media (max-width: 900px) {
+            .chart-canvas-container {
+                height: 400px;
+            }
+            
+            .chart-panel {
+                padding: 15px;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .chart-canvas-container {
+                height: 350px;
+            }
+            
+            .chart-panel {
+                padding: 10px;
+            }
+            
+            .chart-panel h3 {
+                font-size: 16px;
+                margin-bottom: 15px;
+            }
+        }
+
+        .chart-panel {
+            display: none;
+            padding: 20px;
+        }
+
+        .chart-panel.active {
+            display: block;
+        }
+
+        .chart-panel h3 {
+            margin: 0 0 20px 0;
+            color: #333;
+        }
+
+        .chart-insights {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #007bff;
+        }
+
+        @media (max-width: 600px) {
+            .chart-insights {
+                padding: 10px;
+                margin-top: 15px;
+                font-size: 14px;
+            }
+        }
+
+        .chart-insights h4 {
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+
+        #heatmapContainer {
+            min-height: 400px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        @media (max-width: 900px) {
+            #heatmapContainer {
+                flex-direction: column;
+                align-items: center;
+                padding: 15px;
+            }
+        }
+
+        @media (max-width: 600px) {
+            #heatmapContainer {
+                padding: 10px;
+                min-height: 300px;
+            }
+        }
+
+        .heatmap-grid {
+            display: grid;
+            gap: 2px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .heatmap-cell {
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 1px 1px 1px rgba(0,0,0,0.5);
+        }
+
+        .heatmap-legend {
+            margin-left: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        @media (max-width: 900px) {
+            .heatmap-legend {
+                margin-left: 0;
+                margin-top: 20px;
+                flex-direction: row;
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .heatmap-legend {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 2px;
+        }
+
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close:hover,
+        .close:focus {
+            color: black;
+            text-decoration: none;
+        }
+
+        .journey-canvas {
+            padding: 20px;
+            overflow: auto;
+            position: relative;
+        }
+
+        .journey-header {
+            display: flex;
+            justify-content: between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        .timeline {
+            display: flex;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            overflow: hidden;
+            min-height: 600px;
+            /* パフォーマンス最適化 */
+            contain: layout style;
+            transform: translateZ(0);
+        }
+
+        .phase-column {
+            flex: 1;
+            border-right: 1px solid #e2e8f0;
+            padding: 16px;
+            min-width: 200px;
+            /* レイアウトの最適化 */
+            contain: layout;
+        }
+
+        .phase-column:last-child {
+            border-right: none;
+        }
+
+        .phase-header {
+            text-align: center;
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .phase-name {
+            font-size: 16px;
+            font-weight: bold;
+            color: #1e293b;
+            margin-bottom: 4px;
+        }
+
+        .journey-layer {
+            margin-bottom: 24px;
+        }
+
+        .layer-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: #475569;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .layer-content {
+            min-height: 80px;
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 12px;
+            border: 2px dashed #e2e8f0;
+            position: relative;
+        }
+
+        .layer-content.touchpoints {
+            background: #fef3f2;
+            border-color: #fed7d7;
+        }
+
+        .layer-content.emotions {
+            background: #f0f9ff;
+            border-color: #bae6fd;
+        }
+
+        .layer-content.thoughts {
+            background: #f7fee7;
+            border-color: #bbf7d0;
+        }
+
+        .layer-content.needs {
+            background: #fefce8;
+            border-color: #fde047;
+        }
+
+        .layer-content.opportunities {
+            background: #f5f3ff;
+            border-color: #d8b4fe;
+        }
+
+        .journey-item {
+            background: white;
+            border-radius: 6px;
+            padding: 8px 10px;
+            margin-bottom: 6px;
+            font-size: 13px;
+            border: 1px solid #e2e8f0;
+            cursor: pointer;
+            transition: all 0.2s;
+            line-height: 1.3;
+            position: relative;
+        }
+
+        .journey-item:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transform: translateY(-1px);
+        }
+
+        .journey-item:hover .item-actions {
+            opacity: 1;
+        }
+
+        .item-actions {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            display: flex;
+            gap: 4px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .edit-icon, .delete-icon {
+            font-size: 12px;
+            padding: 2px 4px;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .edit-icon:hover {
+            background-color: #e0e7ff;
+        }
+
+        .delete-icon:hover {
+            background-color: #fecaca;
+        }
+
+        .journey-item.touchpoint {
+            border-left: 3px solid #ef4444;
+        }
+
+        .journey-item.emotion {
+            border-left: 3px solid #3b82f6;
+        }
+
+        .journey-item.thought {
+            border-left: 3px solid #10b981;
+        }
+
+        .journey-item.need {
+            border-left: 3px solid #f59e0b;
+        }
+
+        .journey-item.opportunity {
+            border-left: 3px solid #8b5cf6;
+        }
+
+        .add-item-btn {
+            width: 100%;
+            padding: 8px;
+            border: 2px dashed #cbd5e1;
+            background: transparent;
+            border-radius: 6px;
+            color: #64748b;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .add-item-btn:hover {
+            border-color: #4f46e5;
+            color: #4f46e5;
+            background: #f8fafc;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+        }
+
+        .modal-header {
+            margin-bottom: 20px;
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #1e293b;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 6px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .form-input:focus {
+            border-color: #4f46e5;
+        }
+
+        .form-textarea {
+            min-height: 80px;
+            resize: vertical;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .emotion-indicator {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-right: 4px;
+        }
+
+        .emotion-positive {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .emotion-neutral {
+            background: #f3f4f6;
+            color: #374151;
+        }
+
+        .emotion-negative {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .development-stage {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-top: 4px;
+        }
+
+        .stage-dependent {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .stage-exploring {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .stage-authoring {
+            background: #e0e7ff;
+            color: #3730a3;
+        }
+
+        .export-section {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8fafc;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .export-buttons {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .template-card {
+            background: white;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 16px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .template-card:hover {
+            border-color: #4f46e5;
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.15);
+            transform: translateY(-2px);
+        }
+
+        @media (max-width: 1024px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .sidebar {
+                border-right: none;
+                border-bottom: 1px solid #e2e8f0;
+                max-height: calc(100vh - 150px);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .timeline {
+                flex-direction: column;
+            }
+            
+            .phase-column {
+                border-right: none;
+                border-bottom: 1px solid #e2e8f0;
+            }
+            
+            .phase-column:last-child {
+                border-bottom: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🗺️ 学習ジャーニーマップ作成ツール</h1>
+            <p>ペルソナの学習・成長プロセスを可視化し、効果的な教育支援を設計しましょう</p>
+        </div>
+
+        <div class="controls">
+            <div class="control-group">
+                <label>ペルソナ:</label>
+                <input type="text" class="text-input" id="personaName" placeholder="田中太郎（2年生）" value="田中太郎（2年生）">
+            </div>
+            <div class="control-group">
+                <label>期間設定:</label>
+                <select class="select-input" id="timeRange">
+                    <option value="semester">1学期間</option>
+                    <option value="year" selected>1年間</option>
+                    <option value="university">大学4年間</option>
+                    <option value="extended">入学前〜卒業後</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label>焦点:</label>
+                <select class="select-input" id="focusArea">
+                    <option value="general">総合的成長</option>
+                    <option value="academic" selected>学習・研究</option>
+                    <option value="career">キャリア形成</option>
+                    <option value="personal">自己発見</option>
+                    <option value="social">人間関係</option>
+                </select>
+            </div>
+            <button class="btn btn-primary" onclick="updateTimeline()">🔄 タイムライン更新</button>
+            <button class="btn btn-secondary" onclick="showTemplateModal()">📋 テンプレート選択</button>
+            <button class="btn btn-warning" onclick="generateRandomJourney()">🎲 ランダム生成</button>
+            <button class="btn btn-danger" onclick="resetAllData()">🔄 リセット</button>
+        </div>
+
+        <div class="main-content">
+            <div class="sidebar">
+                <div class="timeline-controls">
+                    <h3>📅 フェーズ選択</h3>
+                    <p style="font-size: 12px; color: #64748b; margin-bottom: 12px;">
+                        💡 選択したフェーズに素材が追加されます
+                    </p>
+                    <div id="phaseList">
+                        <div class="phase-item active" data-phase="0">
+                            <div class="phase-title">入学・適応期</div>
+                        </div>
+                        <div class="phase-item" data-phase="1">
+                            <div class="phase-title">学習基盤形成期</div>
+                        </div>
+                        <div class="phase-item" data-phase="2">
+                            <div class="phase-title">専門性探求期</div>
+                        </div>
+                        <div class="phase-item" data-phase="3">
+                            <div class="phase-title">統合・発展期</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="touchpoint-library">
+                    <h3>🎯 タッチポイント素材</h3>
+                    <p style="font-size: 12px; color: #64748b; margin-bottom: 12px;">
+                        📝 クリックして選択中のフェーズに追加
+                    </p>
+                    
+                    <div class="touchpoint-category">
+                        <div class="category-title">授業・学習</div>
+                        <div class="touchpoint-item" data-type="touchpoint">履修登録</div>
+                        <div class="touchpoint-item" data-type="touchpoint">初回授業</div>
+                        <div class="touchpoint-item" data-type="touchpoint">グループワーク</div>
+                        <div class="touchpoint-item" data-type="touchpoint">中間試験</div>
+                        <div class="touchpoint-item" data-type="touchpoint">期末レポート</div>
+                        <div class="touchpoint-item" data-type="touchpoint">研究発表</div>
+                    </div>
+
+                    <div class="touchpoint-category">
+                        <div class="category-title">人間関係</div>
+                        <div class="touchpoint-item" data-type="touchpoint">新入生歓迎会</div>
+                        <div class="touchpoint-item" data-type="touchpoint">サークル活動</div>
+                        <div class="touchpoint-item" data-type="touchpoint">先輩との交流</div>
+                        <div class="touchpoint-item" data-type="touchpoint">教授との面談</div>
+                        <div class="touchpoint-item" data-type="touchpoint">友人との議論</div>
+                        <div class="touchpoint-item" data-type="touchpoint">恋愛関係</div>
+                    </div>
+
+                    <div class="touchpoint-category">
+                        <div class="category-title">イベント・体験</div>
+                        <div class="touchpoint-item" data-type="touchpoint">学園祭</div>
+                        <div class="touchpoint-item" data-type="touchpoint">インターンシップ</div>
+                        <div class="touchpoint-item" data-type="touchpoint">留学説明会</div>
+                        <div class="touchpoint-item" data-type="touchpoint">就活イベント</div>
+                        <div class="touchpoint-item" data-type="touchpoint">ボランティア活動</div>
+                        <div class="touchpoint-item" data-type="touchpoint">アルバイト開始</div>
+                    </div>
+                </div>
+
+                <div class="development-stages">
+                    <h3>🌱 発達段階マーカー</h3>
+                    <p style="font-size: 12px; color: #64748b; margin-bottom: 12px;">
+                        🧠 クリックして思考レイヤーに追加
+                    </p>
+                    <div class="touchpoint-item" data-type="stage">依存的段階</div>
+                    <div class="touchpoint-item" data-type="stage">探索段階</div>
+                    <div class="touchpoint-item" data-type="stage">主体性芽生え</div>
+                    <div class="touchpoint-item" data-type="stage">セルフオーサーシップ</div>
+                </div>
+            </div>
+
+            <div class="journey-canvas">
+                <div class="journey-header">
+                    <h2 id="journeyTitle">田中太郎の学習ジャーニー（1年間）</h2>
+                </div>
+
+                <div class="timeline" id="timeline">
+                    <!-- Phase columns will be dynamically generated -->
+                </div>
+            </div>
+        </div>
+
+        <div class="visualization-section">
+            <h3>📊 高度な可視化・分析</h3>
+            <div class="visualization-controls">
+                <button class="btn btn-primary" onclick="showVisualization()">📈 可視化パネル表示</button>
+                <button class="btn btn-secondary" onclick="generateEmotionChart()">😊 感情推移グラフ</button>
+                <button class="btn btn-secondary" onclick="generatePhaseDistribution()">📊 フェーズ別分布</button>
+                <button class="btn btn-secondary" onclick="generateDevelopmentProgress()">🌱 発達段階進捗</button>
+                <button class="btn btn-secondary" onclick="generateHeatmap()">🔥 密度ヒートマップ</button>
+            </div>
+        </div>
+
+        <div class="export-section">
+            <h3>📤 エクスポート・活用</h3>
+            <div class="export-buttons">
+                <button class="btn btn-primary" onclick="exportAsPrompt()">🤖 AI用プロンプト生成</button>
+                <button class="btn btn-secondary" onclick="exportAsImage()">🖼️ 画像として保存</button>
+                <button class="btn btn-secondary" onclick="exportAsText()">📄 テキスト出力</button>
+                <button class="btn btn-secondary" onclick="showAnalysis()">📊 分析レポート</button>
+                <button class="btn btn-secondary" onclick="exportDataAsJSON()">💾 データ保存</button>
+                <button class="btn btn-secondary" onclick="importDataFromJSON()">📂 データ読み込み</button>
+            </div>
+            <input type="file" id="fileInput" accept=".json" style="display: none;" onchange="handleFileImport(event)")
+        </div>
+    </div>
+
+    <!-- Template Selection Modal -->
+    <div class="modal" id="templateModal">
+        <div class="modal-content" style="max-width: 700px;">
+            <div class="modal-header">
+                <h3 class="modal-title">📋 テンプレート選択</h3>
+                <p style="font-size: 14px; color: #64748b; margin-top: 8px;">
+                    学習者のタイプに応じたサンプルジャーニーマップを適用できます
+                </p>
+            </div>
+            
+            <div class="template-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin: 20px 0;">
+                <div class="template-card" onclick="applyTemplate('motivated_student')">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: #1e293b;">🔥 意欲的な学習者</div>
+                    <div style="font-size: 13px; color: #64748b; line-height: 1.4;">
+                        積極的に学習に取り組み、自ら課題を見つけて挑戦する学生のジャーニー
+                    </div>
+                    <div style="margin-top: 12px; font-size: 12px;">
+                        <span style="background: #e0e7ff; color: #3730a3; padding: 2px 6px; border-radius: 4px; margin-right: 4px;">探索段階→主体性発達</span>
+                    </div>
+                </div>
+                
+                <div class="template-card" onclick="applyTemplate('struggling_student')">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: #1e293b;">😰 学習困難な学生</div>
+                    <div style="font-size: 13px; color: #64748b; line-height: 1.4;">
+                        授業についていけず、自信を失いながらも支援を受けて徐々に回復するジャーニー
+                    </div>
+                    <div style="margin-top: 12px; font-size: 12px;">
+                        <span style="background: #fef3c7; color: #92400e; padding: 2px 6px; border-radius: 4px; margin-right: 4px;">依存段階→探索段階</span>
+                    </div>
+                </div>
+                
+                <div class="template-card" onclick="applyTemplate('social_student')">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: #1e293b;">🤝 人間関係重視型</div>
+                    <div style="font-size: 13px; color: #64748b; line-height: 1.4;">
+                        友人関係や集団活動を通じて学び、協働から個人の成長へと発展するジャーニー
+                    </div>
+                    <div style="margin-top: 12px; font-size: 12px;">
+                        <span style="background: #dcfce7; color: #166534; padding: 2px 6px; border-radius: 4px; margin-right: 4px;">協働学習中心</span>
+                    </div>
+                </div>
+                
+                <div class="template-card" onclick="applyTemplate('career_focused')">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: #1e293b;">🎯 キャリア志向型</div>
+                    <div style="font-size: 13px; color: #64748b; line-height: 1.4;">
+                        将来の職業を見据えて実践的なスキル習得に重点を置く学生のジャーニー
+                    </div>
+                    <div style="margin-top: 12px; font-size: 12px;">
+                        <span style="background: #f3e8ff; color: #6b21a8; padding: 2px 6px; border-radius: 4px; margin-right: 4px;">実践重視</span>
+                    </div>
+                </div>
+                
+                <div class="template-card" onclick="applyTemplate('creative_student')">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: #1e293b;">🎨 創造性重視型</div>
+                    <div style="font-size: 13px; color: #64748b; line-height: 1.4;">
+                        独自の視点と創造的なアプローチで学習に取り組む学生のジャーニー
+                    </div>
+                    <div style="margin-top: 12px; font-size: 12px;">
+                        <span style="background: #fecaca; color: #991b1b; padding: 2px 6px; border-radius: 4px; margin-right: 4px;">創造性発達</span>
+                    </div>
+                </div>
+                
+                <div class="template-card" onclick="applyTemplate('empty_template')">
+                    <div style="font-weight: 600; margin-bottom: 8px; color: #1e293b;">📄 空のテンプレート</div>
+                    <div style="font-size: 13px; color: #64748b; line-height: 1.4;">
+                        全てのデータをクリアして、ゼロから作成を開始します
+                    </div>
+                    <div style="margin-top: 12px; font-size: 12px;">
+                        <span style="background: #f1f5f9; color: #475569; padding: 2px 6px; border-radius: 4px; margin-right: 4px;">カスタム作成</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeTemplateModal()">キャンセル</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Item Modal -->
+    <div class="modal" id="addItemModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="modalTitle">新しい項目を追加</h3>
+            </div>
+            <form id="itemForm">
+                <div class="form-group">
+                    <label class="form-label">種類</label>
+                    <select class="form-input" id="itemType">
+                        <option value="touchpoint">タッチポイント（体験・イベント）</option>
+                        <option value="emotion">感情（気持ち・感情状態）</option>
+                        <option value="thought">思考（考え・認識）</option>
+                        <option value="need">ニーズ（求めているもの）</option>
+                        <option value="opportunity">機会（支援・介入ポイント）</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">タイトル</label>
+                    <input type="text" class="form-input" id="itemTitle" placeholder="例：グループワークで意見衝突">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">詳細説明</label>
+                    <textarea class="form-input form-textarea" id="itemDescription" placeholder="具体的な状況や内容を記述してください"></textarea>
+                </div>
+                <div class="form-group" id="emotionGroup" style="display: none;">
+                    <label class="form-label">感情の強度</label>
+                    <select class="form-input" id="emotionIntensity">
+                        <option value="positive">ポジティブ</option>
+                        <option value="neutral">中立</option>
+                        <option value="negative">ネガティブ</option>
+                    </select>
+                </div>
+                <div class="form-group" id="stageGroup" style="display: none;">
+                    <label class="form-label">発達段階</label>
+                    <select class="form-input" id="developmentStage">
+                        <option value="dependent">依存的段階</option>
+                        <option value="exploring">探索段階</option>
+                        <option value="authoring">主体性発達</option>
+                    </select>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-primary" onclick="addItem()">追加</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
+                </div>
+            </form>        </div>
+    </div>
+
+    <!-- Visualization Modal -->
+    <div class="modal" id="visualizationModal">
+        <div class="modal-content visualization-modal">
+            <span class="close" onclick="closeVisualization()">&times;</span>
+            <h2>📊 高度な可視化・分析</h2>
+            
+            <div class="chart-tabs">
+                <button class="tab-btn active" onclick="switchChart('emotion')">😊 感情推移</button>
+                <button class="tab-btn" onclick="switchChart('distribution')">📊 フェーズ分布</button>
+                <button class="tab-btn" onclick="switchChart('development')">🌱 発達進捗</button>
+                <button class="tab-btn" onclick="switchChart('heatmap')">🔥 密度分析</button>
+            </div>
+            
+            <div class="chart-container">
+                <div id="emotionChart" class="chart-panel active">
+                    <h3>感情推移グラフ</h3>
+                    <div class="chart-canvas-container">
+                        <canvas id="emotionCanvas"></canvas>
+                    </div>
+                    <div class="chart-insights">
+                        <h4>📝 インサイト</h4>
+                        <div id="emotionInsights"></div>
+                    </div>
+                </div>
+                
+                <div id="distributionChart" class="chart-panel">
+                    <h3>フェーズ別データ分布</h3>
+                    <div class="chart-canvas-container">
+                        <canvas id="distributionCanvas"></canvas>
+                    </div>
+                    <div class="chart-insights">
+                        <h4>📝 インサイト</h4>
+                        <div id="distributionInsights"></div>
+                    </div>
+                </div>
+                
+                <div id="developmentChart" class="chart-panel">
+                    <h3>発達段階進捗</h3>
+                    <div class="chart-canvas-container">
+                        <canvas id="developmentCanvas"></canvas>
+                    </div>
+                    <div class="chart-insights">
+                        <h4>📝 インサイト</h4>
+                        <div id="developmentInsights"></div>
+                    </div>
+                </div>
+                
+                <div id="heatmapChart" class="chart-panel">
+                    <h3>活動密度ヒートマップ</h3>
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #007bff;">
+                        <h4 style="margin: 0 0 8px 0; color: #333;">📊 ヒートマップの見方</h4>
+                        <p style="margin: 0; font-size: 14px; line-height: 1.5; color: #555;">
+                            このヒートマップは<strong>各フェーズ（時期）における各レイヤー（分野）の項目数</strong>を色の濃さで表示しています。<br>
+                            • <strong>横軸</strong>：時系列のフェーズ（入学・適応期 → 統合・発展期）<br>
+                            • <strong>縦軸</strong>：5つの分析レイヤー（タッチポイント、感情、思考、ニーズ、機会）<br>
+                            • <strong>色の濃さ</strong>：赤いほど項目数が多く、白いほど項目数が少ない<br>
+                            • <strong>数字</strong>：そのエリアに登録されている項目の実際の数
+                        </p>
+                    </div>
+                    <div id="heatmapContainer"></div>
+                    <div class="chart-insights">
+                        <h4>📝 インサイト</h4>
+                        <div id="heatmapInsights"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Analysis Modal -->
+    <div class="modal" id="analysisModal">
+        <div class="modal-content">
+            <span class="close" onclick="closeAnalysis()">&times;</span>
+            <h2>📊 学習ジャーニー分析レポート</h2>
+            <div id="analysisContent"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentPhase = 0;
+        
+        // パフォーマンス監視とキャッシング
+        const PerformanceMonitor = {
+            startTime: Date.now(),
+            renderCount: 0,
+            
+            track: function(operation, duration) {
+                console.log(`📊 ${operation}: ${duration.toFixed(2)}ms`);
+            },
+            
+            incrementRender: function() {
+                this.renderCount++;
+                if (this.renderCount % 10 === 0) {
+                    console.log(`🔄 レンダリング回数: ${this.renderCount}`);
+                }
+            }
+        };
+        
+        // データアクセスのヘルパー関数群
+        const DataHelper = {
+            // 安全な配列アクセス
+            getSafeArray: function(arr) {
+                return Array.isArray(arr) ? arr : [];
+            },
+            
+            // 安全な文字列アクセス
+            getSafeString: function(str, defaultValue = '') {
+                return (typeof str === 'string' && str.trim()) ? str.trim() : defaultValue;
+            },
+            
+            // フェーズデータの検証
+            validatePhaseData: function(phase) {
+                if (!phase || typeof phase !== 'object') {
+                    return false;
+                }
+                
+                const requiredKeys = ['name', 'touchpoints', 'emotions', 'thoughts', 'needs', 'opportunities'];
+                return requiredKeys.every(key => {
+                    if (key === 'name') {
+                        return typeof phase[key] === 'string';
+                    }
+                    return Array.isArray(phase[key]);
+                });
+            },
+            
+            // データの整合性チェック
+            validateJourneyData: function() {
+                if (!journeyData || !Array.isArray(journeyData.phases)) {
+                    console.error('Invalid journey data structure');
+                    return false;
+                }
+                
+                return journeyData.phases.every((phase, index) => {
+                    const isValid = this.validatePhaseData(phase);
+                    if (!isValid) {
+                        console.error(`Invalid phase data at index ${index}:`, phase);
+                    }
+                    return isValid;
+                });
+            }
+        };
+        
+        let journeyData = {
+            persona: "田中太郎（2年生）",
+            timeRange: "year",
+            focusArea: "academic",
+            phases: [
+                {
+                    name: "入学・適応期",
+                    touchpoints: [],
+                    emotions: [],
+                    thoughts: [],
+                    needs: [],
+                    opportunities: []
+                },
+                {
+                    name: "学習基盤形成期",
+                    touchpoints: [],
+                    emotions: [],
+                    thoughts: [],
+                    needs: [],
+                    opportunities: []
+                },
+                {
+                    name: "専門性探求期",
+                    touchpoints: [],
+                    emotions: [],
+                    thoughts: [],
+                    needs: [],
+                    opportunities: []
+                },
+                {
+                    name: "統合・発展期",
+                    touchpoints: [],
+                    emotions: [],
+                    thoughts: [],
+                    needs: [],
+                    opportunities: []
+                }
+            ]
+        };
+
+        function updateTimeline() {
+            const timeRange = document.getElementById('timeRange').value;
+            const focusArea = document.getElementById('focusArea').value;
+            const personaName = document.getElementById('personaName').value;
+            
+            journeyData.persona = personaName;
+            journeyData.timeRange = timeRange;
+            journeyData.focusArea = focusArea;
+            
+            // Update phases based on time range
+            updatePhases(timeRange);
+            renderTimeline();
+            updateTitle();
+            // addTouchpointLibraryEvents(); // 削除 - 初期化時のみ必要
+        }
+
+        function updatePhases(timeRange) {
+            try {
+                const phaseConfigs = {
+                    semester: [
+                        { name: "導入期" },
+                        { name: "発展期" },
+                        { name: "深化期" },
+                        { name: "統合期" }
+                    ],
+                    year: [
+                        { name: "入学・適応期" },
+                        { name: "学習基盤形成期" },
+                        { name: "専門性探求期" },
+                        { name: "統合・発展期" }
+                    ],
+                    university: [
+                        { name: "1年次（基礎）" },
+                        { name: "2年次（発展）" },
+                        { name: "3年次（深化）" },
+                        { name: "4年次（統合）" }
+                    ],
+                    extended: [
+                        { name: "入学前" },
+                        { name: "大学前半" },
+                        { name: "大学後半" },
+                        { name: "卒業後" }
+                    ]
+                };
+
+                const config = phaseConfigs[timeRange];
+                if (!config) {
+                    console.error('Invalid timeRange:', timeRange);
+                    return;
+                }
+                
+                // Reset currentPhase if it's out of range
+                if (currentPhase >= config.length) {
+                    currentPhase = 0;
+                }
+                
+                // Safely preserve existing data
+                const existingPhases = journeyData.phases || [];
+                journeyData.phases = config.map((phase, index) => ({
+                    ...phase,
+                    touchpoints: existingPhases[index]?.touchpoints || [],
+                    emotions: existingPhases[index]?.emotions || [],
+                    thoughts: existingPhases[index]?.thoughts || [],
+                    needs: existingPhases[index]?.needs || [],
+                    opportunities: existingPhases[index]?.opportunities || []
+                }));
+
+                // Update phase list in sidebar
+                const phaseList = document.getElementById('phaseList');
+                if (phaseList) {
+                    phaseList.innerHTML = config.map((phase, index) => `
+                        <div class="phase-item ${index === currentPhase ? 'active' : ''}" data-phase="${index}">
+                            <div class="phase-title">${phase.name}</div>
+                        </div>
+                    `).join('');
+
+                    // Add click events to newly created elements
+                    addPhaseClickEvents();
+                } else {
+                    console.error('phaseList element not found');
+                }
+            } catch (error) {
+                console.error('Error in updatePhases:', error);
+                // Fallback to default configuration
+                currentPhase = 0;
+            }
+        }
+
+        function addPhaseClickEvents() {
+            try {
+                const phaseItems = document.querySelectorAll('.phase-item');
+                console.log('Adding click events to', phaseItems.length, 'phase items');
+                
+                phaseItems.forEach(item => {
+                    // Remove existing event listeners to prevent duplicates
+                    const newItem = item.cloneNode(true);
+                    if (item.parentNode) {
+                        item.parentNode.replaceChild(newItem, item);
+                    }
+                    
+                    newItem.addEventListener('click', function() {
+                        try {
+                            const newPhase = parseInt(this.dataset.phase);
+                            if (isNaN(newPhase) || newPhase < 0) {
+                                console.error('Invalid phase:', this.dataset.phase);
+                                return;
+                            }
+                            
+                            console.log('Phase clicked:', newPhase, 'Current phase:', currentPhase);
+                            if (newPhase !== currentPhase && newPhase < journeyData.phases.length) {
+                                currentPhase = newPhase;
+                                updateActivePhase();
+                                console.log('Phase changed to:', currentPhase);
+                            }
+                        } catch (error) {
+                            console.error('Error in phase click handler:', error);
+                        }
+                    });
+                });
+            } catch (error) {
+                console.error('Error in addPhaseClickEvents:', error);
+            }
+        }
+
+        function updateActivePhase() {
+            try {
+                document.querySelectorAll('.phase-item').forEach(item => {
+                    item.classList.remove('active');
+                });
+                
+                const activePhaseItem = document.querySelector(`[data-phase="${currentPhase}"]`);
+                if (activePhaseItem) {
+                    activePhaseItem.classList.add('active');
+                } else {
+                    console.warn('Active phase item not found for phase:', currentPhase);
+                }
+                
+                // 現在選択中のフェーズ名をヘルプテキストに反映
+                updatePhaseHelperText();
+            } catch (error) {
+                console.error('Error in updateActivePhase:', error);
+            }
+        }
+        
+        function updatePhaseHelperText() {
+            try {
+                const currentPhaseName = journeyData.phases[currentPhase]?.name || 'フェーズ';
+                
+                // タッチポイント素材エリアのヘルプテキストを更新
+                const touchpointHelp = document.querySelector('.touchpoint-library p');
+                if (touchpointHelp) {
+                    touchpointHelp.textContent = `📝 クリックして「${currentPhaseName}」に追加`;
+                }
+                
+                // 発達段階マーカーエリアのヘルプテキストを更新
+                const stageHelp = document.querySelector('.development-stages p');
+                if (stageHelp) {
+                    stageHelp.textContent = `🧠 クリックして「${currentPhaseName}」の思考レイヤーに追加`;
+                }
+            } catch (error) {
+                console.error('Error in updatePhaseHelperText:', error);
+            }
+        }
+
+        function renderTimeline() {
+            try {
+                const timeline = document.getElementById('timeline');
+                if (!timeline) {
+                    console.error('Timeline element not found');
+                    return;
+                }
+                
+                // レンダリング開始時刻を記録（パフォーマンス測定）
+                const startTime = performance.now();
+                
+                // 安全な配列アクセスのヘルパー関数
+                const getSafeArray = (arr) => arr || [];
+                
+                timeline.innerHTML = journeyData.phases.map((phase, phaseIndex) => `
+                    <div class="phase-column" data-phase="${phaseIndex}">
+                        <div class="phase-header">
+                            <div class="phase-name">${phase.name}</div>
+                        </div>
+                        
+                        <div class="journey-layer">
+                            <div class="layer-title">🎯 タッチポイント (${getSafeArray(phase.touchpoints).length})</div>
+                            <div class="layer-content touchpoints drop-zone" data-layer="touchpoints" data-phase="${phaseIndex}">
+                                ${getSafeArray(phase.touchpoints).map((item, itemIndex) => `
+                                    <div class="journey-item touchpoint draggable" 
+                                         draggable="true" 
+                                         onclick="editItem('touchpoints', ${phaseIndex}, ${itemIndex})" 
+                                         data-item-index="${itemIndex}"
+                                         data-layer="touchpoints"
+                                         data-phase="${phaseIndex}">
+                                        <strong>${item.title || '無題'}</strong>
+                                        ${item.description ? `<br><small>${item.description}</small>` : ''}
+                                        <div class="item-actions">
+                                            <span class="edit-icon" title="編集">✏️</span>
+                                            <span class="delete-icon" onclick="event.stopPropagation(); deleteItem('touchpoints', ${phaseIndex}, ${itemIndex})" title="削除">🗑️</span>
+                                        </div>
+                                    </div>
+                                    <div class="drop-indicator"></div>
+                                `).join('')}
+                                <button class="add-item-btn" onclick="openAddModal('touchpoint', ${phaseIndex})">+ タッチポイント追加</button>
+                            </div>
+                        </div>
+
+                        <div class="journey-layer">
+                            <div class="layer-title">😊 感情 (${getSafeArray(phase.emotions).length})</div>
+                            <div class="layer-content emotions drop-zone" data-layer="emotions" data-phase="${phaseIndex}">
+                                ${getSafeArray(phase.emotions).map((item, itemIndex) => `
+                                    <div class="journey-item emotion draggable" 
+                                         draggable="true" 
+                                         onclick="editItem('emotions', ${phaseIndex}, ${itemIndex})" 
+                                         data-item-index="${itemIndex}"
+                                         data-layer="emotions"
+                                         data-phase="${phaseIndex}">
+                                        <span class="emotion-indicator emotion-${item.intensity || 'medium'}">${item.title || '無題'}</span>
+                                        ${item.description ? `<br><small>${item.description}</small>` : ''}
+                                        <div class="item-actions">
+                                            <span class="edit-icon" title="編集">✏️</span>
+                                            <span class="delete-icon" onclick="event.stopPropagation(); deleteItem('emotions', ${phaseIndex}, ${itemIndex})" title="削除">🗑️</span>
+                                        </div>
+                                    </div>
+                                    <div class="drop-indicator"></div>
+                                `).join('')}
+                                <button class="add-item-btn" onclick="openAddModal('emotion', ${phaseIndex})">+ 感情追加</button>
+                            </div>
+                        </div>
+
+                        <div class="journey-layer">
+                            <div class="layer-title">💭 思考 (${getSafeArray(phase.thoughts).length})</div>
+                            <div class="layer-content thoughts drop-zone" data-layer="thoughts" data-phase="${phaseIndex}">
+                                ${getSafeArray(phase.thoughts).map((item, itemIndex) => `
+                                    <div class="journey-item thought draggable" 
+                                         draggable="true" 
+                                         onclick="editItem('thoughts', ${phaseIndex}, ${itemIndex})" 
+                                         data-item-index="${itemIndex}"
+                                         data-layer="thoughts"
+                                         data-phase="${phaseIndex}">
+                                        <strong>${item.title || '無題'}</strong>
+                                        ${item.description ? `<br><small>${item.description}</small>` : ''}
+                                        ${item.stage ? `<br><span class="development-stage stage-${item.stage}">${item.stage}</span>` : ''}
+                                        <div class="item-actions">
+                                            <span class="edit-icon" title="編集">✏️</span>
+                                            <span class="delete-icon" onclick="event.stopPropagation(); deleteItem('thoughts', ${phaseIndex}, ${itemIndex})" title="削除">🗑️</span>
+                                        </div>
+                                    </div>
+                                    <div class="drop-indicator"></div>
+                                `).join('')}
+                                <button class="add-item-btn" onclick="openAddModal('thought', ${phaseIndex})">+ 思考追加</button>
+                            </div>
+                        </div>
+
+                        <div class="journey-layer">
+                            <div class="layer-title">🎯 ニーズ (${getSafeArray(phase.needs).length})</div>
+                            <div class="layer-content needs drop-zone" data-layer="needs" data-phase="${phaseIndex}">
+                                ${getSafeArray(phase.needs).map((item, itemIndex) => `
+                                    <div class="journey-item need draggable" 
+                                         draggable="true" 
+                                         onclick="editItem('needs', ${phaseIndex}, ${itemIndex})" 
+                                         data-item-index="${itemIndex}"
+                                         data-layer="needs"
+                                         data-phase="${phaseIndex}">
+                                        <strong>${item.title || '無題'}</strong>
+                                        ${item.description ? `<br><small>${item.description}</small>` : ''}
+                                        <div class="item-actions">
+                                            <span class="edit-icon" title="編集">✏️</span>
+                                            <span class="delete-icon" onclick="event.stopPropagation(); deleteItem('needs', ${phaseIndex}, ${itemIndex})" title="削除">🗑️</span>
+                                        </div>
+                                    </div>
+                                    <div class="drop-indicator"></div>
+                                `).join('')}
+                                <button class="add-item-btn" onclick="openAddModal('need', ${phaseIndex})">+ ニーズ追加</button>
+                            </div>
+                        </div>
+
+                        <div class="journey-layer">
+                            <div class="layer-title">💡 支援機会 (${getSafeArray(phase.opportunities).length})</div>
+                            <div class="layer-content opportunities drop-zone" data-layer="opportunities" data-phase="${phaseIndex}">
+                                ${getSafeArray(phase.opportunities).map((item, itemIndex) => `
+                                    <div class="journey-item opportunity draggable" 
+                                         draggable="true" 
+                                         onclick="editItem('opportunities', ${phaseIndex}, ${itemIndex})" 
+                                         data-item-index="${itemIndex}"
+                                         data-layer="opportunities"
+                                         data-phase="${phaseIndex}">
+                                        <strong>${item.title || '無題'}</strong>
+                                        ${item.description ? `<br><small>${item.description}</small>` : ''}
+                                        <div class="item-actions">
+                                            <span class="edit-icon" title="編集">✏️</span>
+                                            <span class="delete-icon" onclick="event.stopPropagation(); deleteItem('opportunities', ${phaseIndex}, ${itemIndex})" title="削除">🗑️</span>
+                                        </div>
+                                    </div>
+                                    <div class="drop-indicator"></div>
+                                `).join('')}
+                                <button class="add-item-btn" onclick="openAddModal('opportunity', ${phaseIndex})">+ 機会追加</button>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+                
+                // レンダリング完了時の処理
+                const endTime = performance.now();
+                console.log(`📊 タイムラインレンダリング完了: ${(endTime - startTime).toFixed(2)}ms`);
+                
+                // DOMの更新を待ってからドラッグ&ドロップイベントを追加
+                setTimeout(() => {
+                    initializeDragAndDrop();
+                }, 0);
+                
+            } catch (error) {
+                console.error('Error in renderTimeline:', error);
+                alert('タイムラインの描画中にエラーが発生しました。');
+            }
+        }
+
+        function openAddModal(type, phaseIndex) {
+            const modal = document.getElementById('addItemModal');
+            const typeSelect = document.getElementById('itemType');
+            const emotionGroup = document.getElementById('emotionGroup');
+            const stageGroup = document.getElementById('stageGroup');
+            
+            typeSelect.value = type;
+            modal.dataset.phase = phaseIndex;
+            modal.dataset.type = type;
+            
+            // Show/hide conditional fields based on type
+            updateModalFields(type);
+            
+            // Add event listener for type changes
+            typeSelect.addEventListener('change', function() {
+                updateModalFields(this.value);
+                modal.dataset.type = this.value;
+            });
+            
+            modal.style.display = 'flex';
+        }
+
+        function updateModalFields(type) {
+            const emotionGroup = document.getElementById('emotionGroup');
+            const stageGroup = document.getElementById('stageGroup');
+            
+            emotionGroup.style.display = type === 'emotion' ? 'block' : 'none';
+            stageGroup.style.display = type === 'thought' ? 'block' : 'none';
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('addItemModal');
+            modal.style.display = 'none';
+            
+            // Reset form completely
+            const form = document.getElementById('itemForm');
+            form.reset();
+            
+            // Clear manual values
+            document.getElementById('itemTitle').value = '';
+            document.getElementById('itemDescription').value = '';
+            
+            // Reset conditional fields display
+            document.getElementById('emotionGroup').style.display = 'none';
+            document.getElementById('stageGroup').style.display = 'none';
+            
+            // Reset modal title
+            document.getElementById('modalTitle').textContent = '新しい項目を追加';
+            
+            // Clear edit mode
+            editingItem = null;
+            
+            // Remove dataset
+            delete modal.dataset.phase;
+            delete modal.dataset.type;
+        }
+
+        function addItem() {
+            try {
+                const modal = document.getElementById('addItemModal');
+                if (!modal) {
+                    console.error('Modal not found');
+                    return;
+                }
+                
+                const phaseIndex = parseInt(modal.dataset.phase);
+                const type = modal.dataset.type;
+                
+                if (isNaN(phaseIndex) || phaseIndex < 0 || phaseIndex >= journeyData.phases.length) {
+                    console.error('Invalid phase index:', phaseIndex);
+                    alert('エラー: 無効なフェーズが選択されています。');
+                    return;
+                }
+                
+                if (!type) {
+                    console.error('Type not specified');
+                    alert('エラー: 項目の種類が指定されていません。');
+                    return;
+                }
+                
+                const titleElement = document.getElementById('itemTitle');
+                const descriptionElement = document.getElementById('itemDescription');
+                const intensityElement = document.getElementById('emotionIntensity');
+                const stageElement = document.getElementById('developmentStage');
+                
+                if (!titleElement || !descriptionElement) {
+                    console.error('Required form elements not found');
+                    alert('エラー: フォーム要素が見つかりません。');
+                    return;
+                }
+                
+                const title = titleElement.value;
+                const description = descriptionElement.value;
+                const intensity = intensityElement ? intensityElement.value : '';
+                const stage = stageElement ? stageElement.value : '';
+                
+                if (!title.trim()) {
+                    alert('タイトルを入力してください。');
+                    titleElement.focus();
+                    return;
+                }
+                
+                const item = {
+                    title: title.trim(),
+                    description: description.trim()
+                };
+                
+                if (type === 'emotion') {
+                    item.intensity = intensity;
+                }
+                
+                if (type === 'thought') {
+                    item.stage = stage;
+                }
+                
+                // Add to data - fix the layer key mapping
+                const layerKey = type === 'touchpoint' ? 'touchpoints' : 
+                                type === 'emotion' ? 'emotions' :
+                                type === 'thought' ? 'thoughts' :
+                                type === 'need' ? 'needs' :
+                                type === 'opportunity' ? 'opportunities' : type + 's';
+                
+                if (!journeyData.phases[phaseIndex][layerKey]) {
+                    journeyData.phases[phaseIndex][layerKey] = [];
+                }
+                
+                // Check if we're editing or adding
+                if (editingItem && 
+                    editingItem.layer === layerKey && 
+                    editingItem.phaseIndex === phaseIndex) {
+                    
+                    // Update existing item
+                    journeyData.phases[phaseIndex][layerKey][editingItem.itemIndex] = item;
+                    console.log('Updated item:', item);
+                    alert(`${item.title} を更新しました。`);
+                    
+                    // Clear edit mode
+                    editingItem = null;
+                } else {
+                    // Add new item
+                    journeyData.phases[phaseIndex][layerKey].push(item);
+                    console.log('Added item:', item, 'to phase:', phaseIndex, 'layer:', layerKey);
+                    alert(`${item.title} を ${journeyData.phases[phaseIndex].name} に追加しました。`);
+                }
+                
+                // Re-render timeline
+                renderTimeline();
+                
+                closeModal();
+            } catch (error) {
+                console.error('Error in addItem:', error);
+                alert('エラーが発生しました。もう一度お試しください。');
+            }
+        }
+
+        function updateTitle() {
+            const title = `${journeyData.persona}の学習ジャーニー（${getTimeRangeLabel(journeyData.timeRange)}）`;
+            document.getElementById('journeyTitle').textContent = title;
+        }
+
+        function getTimeRangeLabel(timeRange) {
+            const labels = {
+                semester: '1学期間',
+                year: '1年間',
+                university: '大学4年間',
+                extended: '入学前〜卒業後'
+            };
+            return labels[timeRange] || '期間設定なし';
+        }
+
+        // Template data
+        const templates = {
+            motivated_student: {
+                name: "意欲的な学習者",
+                data: {
+                    0: {
+                        touchpoints: [
+                            { title: "履修登録", description: "興味ある専門科目を積極的に選択" },
+                            { title: "初回授業", description: "難しそうだが挑戦してみたいと感じる" },
+                            { title: "学習グループ形成", description: "自ら声をかけて勉強仲間を作る" }
+                        ],
+                        emotions: [
+                            { title: "期待感", description: "新しい学びへの高い関心", intensity: "positive" },
+                            { title: "少しの不安", description: "難易度への心配", intensity: "neutral" }
+                        ],
+                        thoughts: [
+                            { title: "深く学びたい", description: "表面的でなく本質を理解したい", stage: "exploring" },
+                            { title: "将来に活かしたい", description: "学んだことを将来につなげたい", stage: "exploring" }
+                        ],
+                        needs: [
+                            { title: "適切な学習方法", description: "効率的で深い学習法を知りたい" },
+                            { title: "挑戦的な課題", description: "やりがいのある課題に取り組みたい" }
+                        ],
+                        opportunities: [
+                            { title: "発展的課題の提供", description: "基礎を超えた応用課題の提示" },
+                            { title: "研究参加機会", description: "教授の研究プロジェクトへの参加" }
+                        ]
+                    },
+                    1: {
+                        touchpoints: [
+                            { title: "中間試験", description: "準備を怠らず高得点を目指す" },
+                            { title: "教授との面談", description: "積極的に質問と相談をする" }
+                        ],
+                        emotions: [
+                            { title: "充実感", description: "学習の手応えを感じている", intensity: "positive" },
+                            { title: "向上心", description: "もっと深く学びたい", intensity: "positive" }
+                        ],
+                        thoughts: [
+                            { title: "自分なりの学習スタイル", description: "効果的な学習方法を確立", stage: "authoring" }
+                        ],
+                        needs: [
+                            { title: "より高次の課題", description: "創造性を発揮できる課題" }
+                        ],
+                        opportunities: [
+                            { title: "学会発表機会", description: "研究成果の発表体験" }
+                        ]
+                    }
+                }
+            },
+            struggling_student: {
+                name: "学習困難な学生",
+                data: {
+                    0: {
+                        touchpoints: [
+                            { title: "履修登録", description: "何を選べばいいかわからず迷う" },
+                            { title: "初回授業", description: "ついていけるか不安になる" },
+                            { title: "最初の課題", description: "何から始めればいいかわからない" }
+                        ],
+                        emotions: [
+                            { title: "不安", description: "大学の学習に対する強い不安", intensity: "negative" },
+                            { title: "混乱", description: "情報が多すぎて整理できない", intensity: "negative" }
+                        ],
+                        thoughts: [
+                            { title: "ついていけない", description: "他の学生との差を感じる", stage: "dependent" },
+                            { title: "どうすればいいかわからない", description: "学習方法が全くわからない", stage: "dependent" }
+                        ],
+                        needs: [
+                            { title: "基礎的な学習支援", description: "勉強の仕方から教えてほしい" },
+                            { title: "精神的サポート", description: "不安を軽減してほしい" }
+                        ],
+                        opportunities: [
+                            { title: "学習支援センター紹介", description: "早期の個別指導開始" },
+                            { title: "ピア・サポート", description: "同級生による学習支援" }
+                        ]
+                    },
+                    1: {
+                        touchpoints: [
+                            { title: "個別指導受講", description: "学習支援センターで基礎から学ぶ" },
+                            { title: "スタディグループ参加", description: "仲間と一緒に勉強する" }
+                        ],
+                        emotions: [
+                            { title: "少し安心", description: "支援を受けて不安が和らぐ", intensity: "neutral" },
+                            { title: "希望", description: "改善の兆しが見えてきた", intensity: "positive" }
+                        ],
+                        thoughts: [
+                            { title: "少しずつわかってきた", description: "基礎的な理解が進む", stage: "exploring" }
+                        ],
+                        needs: [
+                            { title: "継続的な支援", description: "定期的なサポートが必要" }
+                        ],
+                        opportunities: [
+                            { title: "成功体験の創出", description: "小さな達成感を積み重ねる" }
+                        ]
+                    }
+                }
+            },
+            social_student: {
+                name: "人間関係重視型",
+                data: {
+                    0: {
+                        touchpoints: [
+                            { title: "新入生歓迎会", description: "多くの友人を作ることに注力" },
+                            { title: "サークル活動", description: "複数のサークルに積極参加" },
+                            { title: "グループワーク", description: "チームでの活動を楽しむ" }
+                        ],
+                        emotions: [
+                            { title: "楽しさ", description: "人とのつながりに喜びを感じる", intensity: "positive" },
+                            { title: "所属感", description: "グループの一員として安心", intensity: "positive" }
+                        ],
+                        thoughts: [
+                            { title: "みんなと一緒にいたい", description: "集団での活動を重視", stage: "dependent" },
+                            { title: "人の役に立ちたい", description: "他者への貢献を考える", stage: "exploring" }
+                        ],
+                        needs: [
+                            { title: "協働学習の機会", description: "仲間と一緒に学べる環境" },
+                            { title: "コミュニティの形成", description: "居場所となるグループ" }
+                        ],
+                        opportunities: [
+                            { title: "学習コミュニティ運営", description: "勉強会のリーダー役" },
+                            { title: "ピア・サポーター", description: "他の学生を支援する役割" }
+                        ]
+                    }
+                }
+            },
+            career_focused: {
+                name: "キャリア志向型",
+                data: {
+                    0: {
+                        touchpoints: [
+                            { title: "就職ガイダンス", description: "1年生から参加して情報収集" },
+                            { title: "インターンシップ説明会", description: "早期から実務経験を意識" },
+                            { title: "資格取得講座", description: "就職に有利な資格の取得開始" }
+                        ],
+                        emotions: [
+                            { title: "目的意識", description: "明確な将来目標への意欲", intensity: "positive" },
+                            { title: "焦り", description: "他者に遅れることへの不安", intensity: "negative" }
+                        ],
+                        thoughts: [
+                            { title: "将来に役立つことを", description: "実用性を重視した学習", stage: "exploring" },
+                            { title: "競争に勝ちたい", description: "就職活動での優位性を意識", stage: "exploring" }
+                        ],
+                        needs: [
+                            { title: "実践的なスキル", description: "職場で使える具体的技能" },
+                            { title: "業界情報", description: "志望業界の最新動向" }
+                        ],
+                        opportunities: [
+                            { title: "実務家による講演", description: "現場の声を聞く機会" },
+                            { title: "長期インターンシップ", description: "実務経験の積極提供" }
+                        ]
+                    }
+                }
+            },
+            creative_student: {
+                name: "創造性重視型",
+                data: {
+                    0: {
+                        touchpoints: [
+                            { title: "芸術系授業", description: "表現活動に強い関心を示す" },
+                            { title: "自主制作活動", description: "授業外でも創作活動を行う" },
+                            { title: "展示・発表会", description: "作品を他者に見せる機会を求める" }
+                        ],
+                        emotions: [
+                            { title: "創作の喜び", description: "何かを生み出すことへの情熱", intensity: "positive" },
+                            { title: "独自性への渇望", description: "他とは違うものを作りたい", intensity: "positive" }
+                        ],
+                        thoughts: [
+                            { title: "自分らしい表現を", description: "オリジナリティを追求", stage: "authoring" },
+                            { title: "常識にとらわれない", description: "既存の枠を超えたい", stage: "authoring" }
+                        ],
+                        needs: [
+                            { title: "創作環境", description: "自由に制作できる空間と時間" },
+                            { title: "技術的指導", description: "表現技法の向上" }
+                        ],
+                        opportunities: [
+                            { title: "作品展示機会", description: "学内外での発表の場" },
+                            { title: "クリエイター交流", description: "プロとの接点創出" }
+                        ]
+                    }
+                }
+            }
+        };
+
+        function showTemplateModal() {
+            document.getElementById('templateModal').style.display = 'flex';
+        }
+
+        function closeTemplateModal() {
+            document.getElementById('templateModal').style.display = 'none';
+        }
+
+        function applyTemplate(templateId) {
+            if (templateId === 'empty_template') {
+                // Clear all data
+                journeyData.phases.forEach(phase => {
+                    phase.touchpoints = [];
+                    phase.emotions = [];
+                    phase.thoughts = [];
+                    phase.needs = [];
+                    phase.opportunities = [];
+                });
+                
+                renderTimeline();
+                // addTouchpointLibraryEvents(); // 削除 - 不要
+                closeTemplateModal();
+                alert('全てのデータをクリアしました。ゼロから作成を開始してください。');
+                return;
+            }
+
+            const template = templates[templateId];
+            if (!template) {
+                alert('テンプレートが見つかりません。');
+                return;
+            }
+
+            // Apply template data to phases
+            Object.keys(template.data).forEach(phaseIndex => {
+                const phaseData = template.data[phaseIndex];
+                const targetPhase = journeyData.phases[parseInt(phaseIndex)];
+                
+                if (targetPhase) {
+                    // Merge with existing data or replace
+                    Object.keys(phaseData).forEach(layer => {
+                        if (targetPhase[layer]) {
+                            targetPhase[layer] = [...targetPhase[layer], ...phaseData[layer]];
+                        }
+                    });
+                }
+            });
+
+            renderTimeline();
+            // addTouchpointLibraryEvents(); // 削除 - 不要
+            closeTemplateModal();
+            alert(`「${template.name}」テンプレートを適用しました。内容を確認・編集してください。`);
+        }
+
+        // Remove old generateTemplate function and replace with new one
+        let editingItem = null; // Track if we're in edit mode
+
+        function editItem(layer, phaseIndex, itemIndex) {
+            const item = journeyData.phases[phaseIndex][layer][itemIndex];
+            if (!item) return;
+
+            // Set edit mode
+            editingItem = { layer, phaseIndex, itemIndex };
+
+            // Determine item type
+            const type = layer === 'touchpoints' ? 'touchpoint' :
+                        layer === 'emotions' ? 'emotion' :
+                        layer === 'thoughts' ? 'thought' :
+                        layer === 'needs' ? 'need' :
+                        layer === 'opportunities' ? 'opportunity' : 'touchpoint';
+
+            // Open modal with existing data
+            openAddModal(type, phaseIndex);
+
+            // Fill form with existing data
+            document.getElementById('itemTitle').value = item.title || '';
+            document.getElementById('itemDescription').value = item.description || '';
+            
+            if (item.intensity) {
+                document.getElementById('emotionIntensity').value = item.intensity;
+            }
+            
+            if (item.stage) {
+                document.getElementById('developmentStage').value = item.stage;
+            }
+
+            // Change modal title
+            document.getElementById('modalTitle').textContent = '項目を編集';
+        }
+
+        function deleteItem(layer, phaseIndex, itemIndex) {
+            try {
+                // データの検証
+                if (!DataHelper.validateJourneyData()) {
+                    console.error('Journey data validation failed');
+                    alert('データの整合性に問題があります。ページを再読み込みしてください。');
+                    return;
+                }
+                
+                // インデックスの検証
+                if (phaseIndex < 0 || phaseIndex >= journeyData.phases.length) {
+                    console.error('Invalid phase index:', phaseIndex);
+                    return;
+                }
+                
+                const phase = journeyData.phases[phaseIndex];
+                if (!phase[layer] || !Array.isArray(phase[layer])) {
+                    console.error('Invalid layer:', layer);
+                    return;
+                }
+                
+                if (itemIndex < 0 || itemIndex >= phase[layer].length) {
+                    console.error('Invalid item index:', itemIndex);
+                    return;
+                }
+                
+                const item = phase[layer][itemIndex];
+                if (!item) {
+                    console.error('Item not found');
+                    return;
+                }
+
+                const title = DataHelper.getSafeString(item.title, '無題');
+                
+                if (confirm(`「${title}」を削除しますか？\n\nこの操作は元に戻せません。`)) {
+                    // Remove item from data
+                    phase[layer].splice(itemIndex, 1);
+                    
+                    // Re-render with performance tracking
+                    const startTime = performance.now();
+                    renderTimeline();
+                    const endTime = performance.now();
+                    PerformanceMonitor.track('Delete and re-render', endTime - startTime);
+                    
+                    console.log(`Deleted item: ${title} from ${layer} in phase ${phaseIndex}`);
+                    
+                    // Auto-save functionality (optional)
+                    if (localStorage) {
+                        try {
+                            localStorage.setItem('journeyMapAutoSave', JSON.stringify(journeyData));
+                            console.log('💾 Auto-saved to localStorage');
+                        } catch (e) {
+                            console.warn('Auto-save failed:', e);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error in deleteItem:', error);
+                alert('項目の削除中にエラーが発生しました。');
+            }
+        }
+
+        function generateTemplate() {
+            showTemplateModal();
+        }
+
+        function exportAsPrompt() {
+            let prompt = `# 学習ジャーニーマップ分析・活用プロンプト
+
+## 📋 基本情報
+- **ペルソナ**: ${journeyData.persona}
+- **期間**: ${getTimeRangeLabel(journeyData.timeRange)}
+- **焦点**: ${getFocusAreaLabel(journeyData.focusArea)}
+
+## 🗺️ ジャーニーマップ詳細
+
+`;
+
+            journeyData.phases.forEach((phase, index) => {
+                prompt += `### フェーズ${index + 1}: ${phase.name}
+
+**🎯 タッチポイント:**
+${phase.touchpoints.length > 0 ? phase.touchpoints.map(item => `- ${item.title}${item.description ? `: ${item.description}` : ''}`).join('\n') : '- （なし）'}
+
+**😊 感情状態:**
+${phase.emotions.length > 0 ? phase.emotions.map(item => `- ${item.title}（${item.intensity}）${item.description ? `: ${item.description}` : ''}`).join('\n') : '- （なし）'}
+
+**💭 思考・認識:**
+${phase.thoughts.length > 0 ? phase.thoughts.map(item => `- ${item.title}${item.stage ? `[${item.stage}段階]` : ''}${item.description ? `: ${item.description}` : ''}`).join('\n') : '- （なし）'}
+
+**🎯 ニーズ:**
+${phase.needs.length > 0 ? phase.needs.map(item => `- ${item.title}${item.description ? `: ${item.description}` : ''}`).join('\n') : '- （なし）'}
+
+**💡 支援機会:**
+${phase.opportunities.length > 0 ? phase.opportunities.map(item => `- ${item.title}${item.description ? `: ${item.description}` : ''}`).join('\n') : '- （なし）'}
+
+`;
+            });
+
+            prompt += `
+## 🤖 AI分析指示
+
+このジャーニーマップを元に以下の分析・提案を行ってください：
+
+1. **セルフ・オーサーシップ発達分析**
+   - 各フェーズでの発達段階の変化
+   - 主体性の芽生えと成長のパターン
+   - 依存→探索→主体性のプロセス分析
+
+2. **ペインポイント・チャンスポイント特定**
+   - 支援が必要な危険信号の特定
+   - 成長を促す介入タイミングの特定
+   - 感情・思考・行動の相関関析
+
+3. **教育支援戦略の提案**
+   - 各フェーズで効果的な支援方法
+   - 個別性を考慮したアプローチ
+   - 長期的な成長を促す仕組み
+
+4. **改善提案**
+   - より効果的なジャーニー設計
+   - 追加すべきタッチポイント
+   - 支援体制の強化ポイント
+
+5. **類似ケースへの応用**
+   - 類似特性を持つ学生への応用方法
+   - 一般化可能な支援パターン
+   - スケーラブルな支援体制の提案
+
+## 📊 期待する出力形式
+
+1. **分析結果（図表含む）**
+2. **具体的な支援プラン**
+3. **実装ロードマップ**
+4. **評価指標の提案**
+5. **継続的改善の仕組み**`;
+
+            // Show export modal or copy to clipboard
+            navigator.clipboard.writeText(prompt).then(() => {
+                alert('AI用プロンプトをクリップボードにコピーしました！');
+            }).catch(() => {
+                // Fallback - show in a modal
+                const textarea = document.createElement('textarea');
+                textarea.value = prompt;
+                textarea.style.width = '100%';
+                textarea.style.height = '400px';
+                
+                const modal = document.createElement('div');
+                modal.className = 'modal';
+                modal.style.display = 'flex';
+                modal.innerHTML = `
+                    <div class="modal-content" style="max-width: 800px;">
+                        <div class="modal-header">
+                            <h3>AI用プロンプト</h3>
+                        </div>
+                        ${textarea.outerHTML}
+                        <div class="modal-actions">
+                            <button class="btn btn-primary" onclick="this.closest('.modal').remove()">閉じる</button>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+            });
+        }
+
+        function getFocusAreaLabel(focusArea) {
+            const labels = {
+                general: '総合的成長',
+                academic: '学習・研究',
+                career: 'キャリア形成',
+                personal: '自己発見',
+                social: '人間関係'
+            };
+            return labels[focusArea] || '未設定';
+        }
+
+        function exportAsImage() {
+            alert('画像エクスポート機能は開発中です。現在はスクリーンショットをご利用ください。');
+        }
+
+        function exportAsText() {
+            let output = `${journeyData.persona}の学習ジャーニーマップ\n`;
+            output += `期間: ${getTimeRangeLabel(journeyData.timeRange)}\n`;
+            output += `焦点: ${getFocusAreaLabel(journeyData.focusArea)}\n\n`;
+
+            journeyData.phases.forEach((phase, index) => {
+                output += `=== ${phase.name} ===\n\n`;
+                
+                output += `タッチポイント:\n`;
+                phase.touchpoints.forEach(item => {
+                    output += `- ${item.title}\n`;
+                    if (item.description) output += `  ${item.description}\n`;
+                });
+                
+                output += `\n感情:\n`;
+                phase.emotions.forEach(item => {
+                    output += `- ${item.title} (${item.intensity})\n`;
+                    if (item.description) output += `  ${item.description}\n`;
+                });
+                
+                output += `\n思考:\n`;
+                phase.thoughts.forEach(item => {
+                    output += `- ${item.title}\n`;
+                    if (item.description) output += `  ${item.description}\n`;
+                });
+                
+                output += `\nニーズ:\n`;
+                phase.needs.forEach(item => {
+                    output += `- ${item.title}\n`;
+                    if (item.description) output += `  ${item.description}\n`;
+                });
+                
+                output += `\n支援機会:\n`;
+                phase.opportunities.forEach(item => {
+                    output += `- ${item.title}\n`;
+                    if (item.description) output += `  ${item.description}\n`;
+                });
+                
+                output += `\n`;
+            });
+
+            const blob = new Blob([output], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${journeyData.persona.replace(/[^a-zA-Z0-9]/g, '_')}_journey_map.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function exportDataAsJSON() {
+            const dataStr = JSON.stringify(journeyData, null, 2);
+            const dataBlob = new Blob([dataStr], {type: 'application/json'});
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `journey_map_${journeyData.persona}_${new Date().toISOString().split('T')[0]}.json`;
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function importDataFromJSON() {
+            document.getElementById('fileInput').click();
+        }
+
+        function handleFileImport(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+                    journeyData = importedData;
+                    
+                    // Update UI elements
+                    document.getElementById('personaName').value = journeyData.persona;
+                    document.getElementById('timeRange').value = journeyData.timeRange;
+                    document.getElementById('focusArea').value = journeyData.focusArea;
+                    
+                    updatePhases(journeyData.timeRange);
+                    renderTimeline();
+                    updateTitle();
+                    // addTouchpointLibraryEvents(); // 削除 - 不要
+                    
+                    alert('データを正常にインポートしました！');
+                } catch (error) {
+                    alert('ファイルの読み込みに失敗しました。正しいJSONファイルか確認してください。');
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // ランダム生成用のデータ池
+        const randomDataPool = {
+            personas: [
+                "田中太郎（2年生）", "佐藤花子（1年生）", "山田健一（3年生）", "鈴木美咲（4年生）",
+                "高橋拓海（2年生）", "伊藤あかり（1年生）", "渡辺翔太（3年生）", "中村由美（4年生）"
+            ],
+            touchpoints: {
+               
+                academic: [
+                    { title: "履修登録", description: "興味ある専門科目を選択" },
+                    { title: "初回授業", description: "新しい分野への挑戦" },
+                    { title: "グループワーク", description: "チームでの課題解決" },
+                    { title: "中間試験", description: "学習成果の確認" },
+                    { title: "期末レポート", description: "学期の総仕上げ" },
+                    { title: "研究発表", description: "自分の成果を発表" },
+                    { title: "ゼミナール", description: "少人数での深い議論" },
+                    { title: "実習・実験", description: "理論を実践で確認" }
+                ],
+                social: [
+                    { title: "新入生歓迎会", description: "新しい友人との出会い" },
+                    { title: "サークル活動", description: "共通の趣味を持つ仲間" },
+                    { title: "先輩との交流", description: "経験者からのアドバイス" },
+                    { title: "教授との面談", description: "学習・進路相談" },
+                    { title: "友人との議論", description: "多様な価値観に触れる" },
+                    { title: "学園祭", description: "大学全体でのイベント参加" }
+                ],
+                career: [
+                    { title: "インターンシップ", description: "実際の職場体験" },
+                    { title: "就活イベント", description: "企業説明会への参加" },
+                    { title: "資格取得講座", description: "専門スキルの習得" },
+                    { title: "キャリア相談", description: "将来設計の相談" },
+                    { title: "業界研究", description: "志望分野の調査" },
+                    { title: "面接練習", description: "就職活動の準備" }
+                ]
+            },
+            emotions: [
+                { title: "期待感", description: "新しい挑戦への興奮", intensity: "positive" },
+                { title: "不安", description: "未知への恐れ", intensity: "negative" },
+                { title: "充実感", description: "成長を実感", intensity: "positive" },
+                { title: "混乱", description: "情報過多で整理困難", intensity: "negative" },
+                { title: "達成感", description: "目標を達成した喜び", intensity: "positive" },
+                { title: "孤独感", description: "一人で悩む状況", intensity: "negative" },
+                { title: "安心感", description: "支援を受けて落ち着く", intensity: "positive" },
+                { title: "焦り", description: "他者との比較による不安", intensity: "negative" }
+            ],
+            thoughts: [
+                { title: "もっと学びたい", description: "知識への強い関心", stage: "exploring" },
+                { title: "将来が心配", description: "進路への不安", stage: "dependent" },
+                { title: "自分なりのやり方", description: "独自のアプローチを模索", stage: "authoring" },
+                { title: "他の人はどうしているか", description: "周囲との比較", stage: "dependent" },
+                { title: "これが自分の道", description: "自分の価値観を確立", stage: "authoring" },
+                { title: "色々試してみたい", description: "多様な経験への意欲", stage: "exploring" }
+            ],
+            needs: [
+                { title: "基礎的な学習支援", description: "勉強方法の指導" },
+                { title: "精神的サポート", description: "不安や悩みの相談" },
+                { title: "実践的な経験", description: "理論を活用する機会" },
+                { title: "ロールモデル", description: "目標となる先輩や教員" },
+                { title: "自由な探索時間", description: "自分のペースで学ぶ時間" },
+                { title: "フィードバック", description: "成長の確認と改善点" }
+            ],
+            opportunities: [
+                { title: "個別指導の提供", description: "一対一での学習支援" },
+                { title: "ピア・サポート", description: "同級生による相互支援" },
+                { title: "研究参加機会", description: "教員の研究プロジェクト参加" },
+                { title: "発表機会の創出", description: "成果を披露する場の提供" },
+                { title: "メンター制度", description: "先輩学生による継続的支援" },
+                { title: "自主学習環境", description: "集中できる学習スペース" }
+            ]
+        };
+
+        // ランダム選択のヘルパー関数
+        function getRandomItem(array) {
+            return array[Math.floor(Math.random() * array.length)];
+        }
+
+        function getRandomItems(array, count) {
+            const shuffled = [...array].sort(() => 0.5 - Math.random());
+            return shuffled.slice(0, count);
+        }
+
+        // ランダムジャーニー生成関数
+        function generateRandomJourney() {
+            if (!confirm('現在のデータが上書きされます。ランダムジャーニーを生成しますか？')) {
+                return;
+            }
+
+            // ペルソナをランダム選択
+            const randomPersona = getRandomItem(randomDataPool.personas);
+            document.getElementById('personaName').value = randomPersona;
+            journeyData.persona = randomPersona;
+
+            // 期間と焦点をランダム選択
+            const timeRanges = ['semester', 'year', 'university', 'extended'];
+            const focusAreas = ['general', 'academic', 'career', 'personal', 'social'];
+            
+            const randomTimeRange = getRandomItem(timeRanges);
+            const randomFocusArea = getRandomItem(focusAreas);
+            
+            document.getElementById('timeRange').value = randomTimeRange;
+            document.getElementById('focusArea').value = randomFocusArea;
+            
+            journeyData.timeRange = randomTimeRange;
+            journeyData.focusArea = randomFocusArea;
+
+            // フェーズを更新
+            updatePhases(randomTimeRange);
+
+            // 各フェーズにランダムデータを追加
+            journeyData.phases.forEach((phase, phaseIndex) => {
+                // タッチポイント（1-3個）
+                const touchpointSources = [
+                    ...randomDataPool.touchpoints.academic,
+                    ...randomDataPool.touchpoints.social,
+                    ...randomDataPool.touchpoints.career
+                ];
+                phase.touchpoints = getRandomItems(touchpointSources, Math.floor(Math.random() * 3) + 1);
+
+                // 感情（1-2個）
+                phase.emotions = getRandomItems(randomDataPool.emotions, Math.floor(Math.random() * 2) + 1);
+
+                // 思考（1-2個）
+                phase.thoughts = getRandomItems(randomDataPool.thoughts, Math.floor(Math.random() * 2) + 1);
+
+                // ニーズ（1-2個）
+                phase.needs = getRandomItems(randomDataPool.needs, Math.floor(Math.random() * 2) + 1);
+
+                // 支援機会（1-2個）
+                phase.opportunities = getRandomItems(randomDataPool.opportunities, Math.floor(Math.random() * 2) + 1);
+            });
+
+            // UIを更新
+            renderTimeline();
+            updateTitle();
+            // addTouchpointLibraryEvents(); // 削除 - 不要
+
+            alert(`ランダムジャーニーを生成しました！\n\nペルソナ: ${randomPersona}\n期間: ${getTimeRangeLabel(randomTimeRange)}\n焦点: ${getFocusAreaLabel(randomFocusArea)}`);
+        }
+
+        // リセット機能
+        function resetAllData() {
+            if (!confirm('全てのデータがクリアされます。本当にリセットしますか？\n\nこの操作は元に戻せません。')) {
+                return;
+            }
+
+            // フォーム要素をデフォルト値にリセット
+            document.getElementById('personaName').value = '田中太郎（2年生）';
+            document.getElementById('timeRange').value = 'year';
+            document.getElementById('focusArea').value = 'academic';
+
+            // journeyDataをデフォルト状態にリセット
+            journeyData = {
+                persona: "田中太郎（2年生）",
+                timeRange: "year",
+                focusArea: "academic",
+                phases: [
+                    {
+                        name: "入学・適応期",
+                        period: "4-6月",
+                        touchpoints: [],
+                        emotions: [],
+                        thoughts: [],
+                        needs: [],
+                        opportunities: []
+                    },
+                    {
+                        name: "学習基盤形成期",
+                        period: "7-9月",
+                        touchpoints: [],
+                        emotions: [],
+                        thoughts: [],
+                        needs: [],
+                        opportunities: []
+                    },
+                    {
+                        name: "専門性探求期",
+                        period: "10-12月",
+                        touchpoints: [],
+                        emotions: [],
+                        thoughts: [],
+                        needs: [],
+                        opportunities: []
+                    },
+                    {
+                        name: "統合・発展期",
+                        period: "1-3月",
+                        touchpoints: [],
+                        emotions: [],
+                        thoughts: [],
+                        needs: [],
+                        opportunities: []
+                    }
+                ]
+            };
+
+            // 現在のフェーズをリセット
+            currentPhase = 0;
+
+            // エディットモードをクリア
+            editingItem = null;
+
+            // UIを更新
+            updatePhases('year');
+            renderTimeline();
+            updateTitle();
+            // addTouchpointLibraryEvents(); // 削除 - 不要
+
+            alert('全てのデータがリセットされました。新しいジャーニーマップの作成を開始してください。');
+        }
+
+        // showAnalysis関数を追加
+        function showAnalysis() {
+            let analysisText = `# ${journeyData.persona}の学習ジャーニー分析レポート\n\n`;
+            
+            // 基本統計
+            let totalItems = 0;
+            let emotionCounts = { positive: 0, neutral: 0, negative: 0 };
+            let stageCounts = { dependent: 0, exploring: 0, authoring: 0 };
+            
+            journeyData.phases.forEach(phase => {
+                totalItems += phase.touchpoints.length + phase.emotions.length + 
+                             phase.thoughts.length + phase.needs.length + phase.opportunities.length;
+                
+                phase.emotions.forEach(emotion => {
+                    emotionCounts[emotion.intensity]++;
+                });
+                
+                phase.thoughts.forEach(thought => {
+                    if (thought.stage) stageCounts[thought.stage]++;
+                });
+            });
+            
+            analysisText += `## 📊 基本統計\n`;
+            analysisText += `- 総項目数: ${totalItems}件\n`;
+            analysisText += `- 感情分布: ポジティブ ${emotionCounts.positive}件、中立 ${emotionCounts.neutral}件、ネガティブ ${emotionCounts.negative}件\n`;
+            analysisText += `- 発達段階: 依存 ${stageCounts.dependent}件、探索 ${stageCounts.exploring}件、主体性 ${stageCounts.authoring}件\n\n`;
+            
+            // フェーズ別分析
+            analysisText += `## 🗺️ フェーズ別分析\n`;
+            journeyData.phases.forEach((phase, index) => {
+                analysisText += `### ${index + 1}. ${phase.name}\n`;
+                analysisText += `- タッチポイント: ${phase.touchpoints.length}件\n`;
+                analysisText += `- 感情: ${phase.emotions.length}件\n`;
+                analysisText += `- 思考: ${phase.thoughts.length}件\n`;
+                analysisText += `- ニーズ: ${phase.needs.length}件\n`;
+                analysisText += `- 支援機会: ${phase.opportunities.length}件\n\n`;
+            });
+            
+            // モーダルで表示
+            const modal = document.createElement('div');
+            modal.className = 'modal';
+            modal.style.display = 'flex';
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width: 800px; max-height: 80vh; overflow-y: auto;">
+                    <div class="modal-header">
+                        <h3 class="modal-title">📊 ジャーニー分析レポート</h3>
+                    </div>
+                    <div style="white-space: pre-line; font-family: monospace; font-size: 13px; line-height: 1.5;">
+                        ${analysisText}
+                    </div>
+                    <div class="modal-actions">
+                        <button class="btn btn-primary" onclick="navigator.clipboard.writeText('${analysisText.replace(/'/g, "\\'")}').then(() => alert('分析レポートをクリップボードにコピーしました！'))">📋 コピー</button>
+                        <button class="btn btn-secondary" onclick="this.closest('.modal').remove()">閉じる</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        // ===== 高度な可視化機能 =====
+        let activeChart = 'emotion';
+        let chartInstances = {};
+
+        function showVisualization() {
+            document.getElementById('visualizationModal').style.display = 'block';
+            generateEmotionChart();
+        }
+
+        function closeVisualization() {
+            document.getElementById('visualizationModal').style.display = 'none';
+            // チャートインスタンスをクリーンアップ
+            Object.values(chartInstances).forEach(chart => {
+                if (chart && typeof chart.destroy === 'function') {
+                    chart.destroy();
+                }
+            });
+            chartInstances = {};
+        }
+
+        function switchChart(chartType) {
+            // タブの切り替え
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // パネルの切り替え
+            document.querySelectorAll('.chart-panel').forEach(panel => panel.classList.remove('active'));
+            document.getElementById(chartType + 'Chart').classList.add('active');
+            
+            activeChart = chartType;
+            
+            // 対応するチャートを生成
+            switch(chartType) {
+                case 'emotion':
+                    generateEmotionChart();
+                    break;
+                case 'distribution':
+                    generatePhaseDistribution();
+                    break;
+                case 'development':
+                    generateDevelopmentProgress();
+                    break;
+                case 'heatmap':
+                    generateHeatmap();
+                    break;
+            }
+        }
+
+        function generateEmotionChart() {
+            const ctx = document.getElementById('emotionCanvas').getContext('2d');
+            
+            if (chartInstances.emotion) {
+                chartInstances.emotion.destroy();
+            }
+            
+            // 感情データの準備
+            const emotionData = [];
+            const labels = [];
+            
+            journeyData.phases.forEach((phase, index) => {
+                phase.emotions.forEach(emotion => {
+                    let score = 0;
+                    switch(emotion.intensity) {
+                        case 'positive': score = Math.random() * 2 + 3; break; // 3-5
+                        case 'neutral': score = Math.random() * 2 + 1; break;  // 1-3
+                        case 'negative': score = Math.random() * 2 - 1; break; // -1-1
+                    }
+                    emotionData.push({ x: index, y: score, label: emotion.title });
+                });
+                labels.push(phase.name);
+            });
+            
+            // サンプルデータを追加（実際のデータが少ない場合）
+            if (emotionData.length < 3) {
+                journeyData.phases.forEach((phase, index) => {
+                    emotionData.push({
+                        x: index,
+                        y: Math.sin(index * 0.8) * 2 + 2,
+                        label: `${phase.name}の感情`
+                    });
+                });
+            }
+            
+            chartInstances.emotion = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: '感情スコア',
+                        data: emotionData.map(d => d.y),
+                        borderColor: '#FF6B6B',
+                        backgroundColor: 'rgba(255, 107, 107, 0.1)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4,
+                        pointBackgroundColor: '#FF6B6B',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        pointRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        intersect: false,
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: '学習ジャーニーにおける感情推移',
+                            font: { 
+                                size: window.innerWidth < 600 ? 14 : 16 
+                            }
+                        },
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            min: -2,
+                            max: 5,
+                            ticks: {
+                                font: {
+                                    size: window.innerWidth < 600 ? 10 : 12
+                                },
+                                callback: function(value) {
+                                    if (value > 3) return window.innerWidth < 600 ? '😊' : '😊 ポジティブ';
+                                    if (value > 1) return window.innerWidth < 600 ? '😐' : '😐 中立';
+                                    return window.innerWidth < 600 ? '😞' : '😞 ネガティブ';
+                                }
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                font: {
+                                    size: window.innerWidth < 600 ? 10 : 12
+                                },
+                                maxRotation: window.innerWidth < 600 ? 45 : 0
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // インサイトの生成
+            generateEmotionInsights(emotionData);
+        }
+
+        function generateEmotionInsights(emotionData) {
+            const insights = document.getElementById('emotionInsights');
+            const avgEmotion = emotionData.reduce((sum, d) => sum + d.y, 0) / emotionData.length;
+            const highestPhase = emotionData.reduce((max, d) => d.y > max.y ? d : max, emotionData[0]);
+            const lowestPhase = emotionData.reduce((min, d) => d.y < min.y ? d : min, emotionData[0]);
+            
+            insights.innerHTML = `
+                <p><strong>平均感情スコア:</strong> ${avgEmotion.toFixed(1)} (${avgEmotion > 2 ? 'ポジティブ寄り' : 'ネガティブ寄り'})</p>
+                <p><strong>最も感情的に高い段階:</strong> ${journeyData.phases[highestPhase.x]?.name || 'N/A'}</p>
+                <p><strong>最も感情的に低い段階:</strong> ${journeyData.phases[lowestPhase.x]?.name || 'N/A'}</p>
+                <p><strong>提案:</strong> ${avgEmotion < 1 ? '全体的にサポートを強化することを推奨' : '感情の低い段階での支援策を検討'}</p>
+            `;
+        }
+
+        function generatePhaseDistribution() {
+            const ctx = document.getElementById('distributionCanvas').getContext('2d');
+            
+            if (chartInstances.distribution) {
+                chartInstances.distribution.destroy();
+            }
+            
+            // フェーズ別データ数の集計
+            const phaseDataCounts = journeyData.phases.map(phase => ({
+                name: phase.name,
+                touchpoints: phase.touchpoints.length,
+                emotions: phase.emotions.length,
+                thoughts: phase.thoughts.length,
+                needs: phase.needs.length,
+                opportunities: phase.opportunities.length
+            }));
+            
+            chartInstances.distribution = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: phaseDataCounts.map(p => p.name),
+                    datasets: [
+                        {
+                            label: 'タッチポイント',
+                            data: phaseDataCounts.map(p => p.touchpoints),
+                            backgroundColor: 'rgba(54, 162, 235, 0.8)'
+                        },
+                        {
+                            label: '感情',
+                            data: phaseDataCounts.map(p => p.emotions),
+                            backgroundColor: 'rgba(255, 99, 132, 0.8)'
+                        },
+                        {
+                            label: '思考',
+                            data: phaseDataCounts.map(p => p.thoughts),
+                            backgroundColor: 'rgba(75, 192, 192, 0.8)'
+                        },
+                        {
+                            label: 'ニーズ',
+                            data: phaseDataCounts.map(p => p.needs),
+                            backgroundColor: 'rgba(255, 206, 86, 0.8)'
+                        },
+                        {
+                            label: '機会',
+                            data: phaseDataCounts.map(p => p.opportunities),
+                            backgroundColor: 'rgba(153, 102, 255, 0.8)'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        intersect: false,
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'フェーズ別データ分布',
+                            font: { 
+                                size: window.innerWidth < 600 ? 14 : 16 
+                            }
+                        },
+                        legend: {
+                            position: window.innerWidth < 600 ? 'bottom' : 'top',
+                            labels: {
+                                font: {
+                                    size: window.innerWidth < 600 ? 10 : 12
+                                },
+                                boxWidth: window.innerWidth < 600 ? 15 : 20
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            stacked: true,
+                            ticks: {
+                                font: {
+                                    size: window.innerWidth < 600 ? 10 : 12
+                                },
+                                maxRotation: window.innerWidth < 600 ? 45 : 0
+                            }
+                        },
+                        y: {
+                            stacked: true,
+                            beginAtZero: true,
+                            ticks: {
+                                font: {
+                                    size: window.innerWidth < 600 ? 10 : 12
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            
+            generateDistributionInsights(phaseDataCounts);
+        }
+
+        function generateDistributionInsights(phaseDataCounts) {
+            const insights = document.getElementById('distributionInsights');
+            const totalCounts = phaseDataCounts.map(phase => 
+                phase.touchpoints + phase.emotions + phase.thoughts + phase.needs + phase.opportunities
+            );
+            const maxIndex = totalCounts.indexOf(Math.max(...totalCounts));
+            const minIndex = totalCounts.indexOf(Math.min(...totalCounts));
+            
+            insights.innerHTML = `
+                <p><strong>最も活動的なフェーズ:</strong> ${phaseDataCounts[maxIndex].name} (${totalCounts[maxIndex]}項目)</p>
+                <p><strong>最も静かなフェーズ:</strong> ${phaseDataCounts[minIndex].name} (${totalCounts[minIndex]}項目)</p>
+                <p><strong>データ分布の特徴:</strong> ${totalCounts.some(c => c > totalCounts.reduce((a,b) => a+b)/totalCounts.length * 1.5) ? '不均等な分布 - 特定フェーズに集中' : '比較的均等な分布'}</p>
+                <p><strong>提案:</strong> ${totalCounts[minIndex] < 2 ? '活動の少ないフェーズでの詳細調査を推奨' : '各フェーズのバランスは良好'}</p>
+            `;
+        }
+
+        function generateDevelopmentProgress() {
+            const ctx = document.getElementById('developmentCanvas').getContext('2d');
+            
+            if (chartInstances.development) {
+                chartInstances.development.destroy();
+            }
+            
+            // 発達段階のプログレス（サンプルデータ）
+            const progressData = journeyData.phases.map((phase, index) => {
+                const total = phase.touchpoints.length + phase.emotions.length + phase.thoughts.length + phase.needs.length + phase.opportunities.length;
+                return {
+                    phase: phase.name,
+                    dependent: Math.max(0, 100 - index * 30 - total * 5),
+                    exploring: Math.min(100, index * 25 + total * 8),
+                    authoring: Math.min(100, Math.max(0, index * 20 + total * 10 - 50))
+                };
+            });
+            
+            chartInstances.development = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: progressData.map(p => p.phase),
+                    datasets: [
+                        {
+                            label: '依存段階',
+                            data: progressData.map(p => p.dependent),
+                            borderColor: '#FF6B6B',
+                            backgroundColor: 'rgba(255, 107, 107, 0.2)',
+                            pointBackgroundColor: '#FF6B6B'
+                        },
+                        {
+                            label: '探索段階',
+                            data: progressData.map(p => p.exploring),
+                            borderColor: '#4ECDC4',
+                            backgroundColor: 'rgba(78, 205, 196, 0.2)',
+                            pointBackgroundColor: '#4ECDC4'
+                        },
+                        {
+                            label: '創造段階',
+                            data: progressData.map(p => p.authoring),
+                            borderColor: '#45B7D1',
+                            backgroundColor: 'rgba(69, 183, 209, 0.2)',
+                            pointBackgroundColor: '#45B7D1'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        intersect: false,
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: '学習発達段階の推移',
+                            font: { 
+                                size: window.innerWidth < 600 ? 14 : 16 
+                            }
+                        },
+                        legend: {
+                            position: window.innerWidth < 600 ? 'bottom' : 'top',
+                            labels: {
+                                font: {
+                                    size: window.innerWidth < 600 ? 10 : 12
+                                },
+                                boxWidth: window.innerWidth < 600 ? 15 : 20
+                            }
+                        }
+                    },
+                    scales: {
+                        r: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: {
+                                stepSize: 20,
+                                font: {
+                                    size: window.innerWidth < 600 ? 9 : 11
+                                }
+                            },
+                            pointLabels: {
+                                font: {
+                                    size: window.innerWidth < 600 ? 10 : 12
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            
+            generateDevelopmentInsights(progressData);
+        }
+
+        function generateDevelopmentInsights(progressData) {
+            const insights = document.getElementById('developmentInsights');
+            const finalStage = progressData[progressData.length - 1];
+            const dominantStage = finalStage.dependent > finalStage.exploring && finalStage.dependent > finalStage.authoring ? '依存' :
+                                 finalStage.exploring > finalStage.authoring ? '探索' : '創造';
+            
+            insights.innerHTML = `
+                <p><strong>最終段階での主要発達レベル:</strong> ${dominantStage}段階</p>
+                <p><strong>創造段階への到達度:</strong> ${finalStage.authoring.toFixed(0)}%</p>
+                <p><strong>発達パターン:</strong> ${finalStage.authoring > 70 ? '順調な自律学習者への成長' : '更なる支援が必要'}</p>
+                <p><strong>提案:</strong> ${dominantStage === '依存' ? '自主性を促す活動を増やす' : dominantStage === '探索' ? '創造的活動への導きを強化' : '自律学習の維持・発展を支援'}</p>
+            `;
+        }
+
+        function generateHeatmap() {
+            const container = document.getElementById('heatmapContainer');
+            
+            // ヒートマップデータの準備
+            const layers = ['タッチポイント', '感情', '思考', 'ニーズ', '機会'];
+            const phases = journeyData.phases;
+            
+            const heatmapData = phases.map((phase, phaseIndex) => {
+                return layers.map((layer, layerIndex) => {
+                    let count = 0;
+                    switch(layerIndex) {
+                        case 0: count = phase.touchpoints.length; break;
+                        case 1: count = phase.emotions.length; break;
+                        case 2: count = phase.thoughts.length; break;
+                        case 3: count = phase.needs.length; break;
+                        case 4: count = phase.opportunities.length; break;
+                    }
+                    return count;
+                });
+            });
+            
+            const maxValue = Math.max(...heatmapData.flat());
+            
+            container.innerHTML = `
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 20px;">
+                    <!-- フェーズヘッダー -->
+                    <div style="display: grid; grid-template-columns: 120px repeat(${phases.length}, 1fr); gap: 2px; width: 100%; max-width: 800px;">
+                        <div></div>
+                        ${phases.map(phase => `<div style="text-align: center; font-weight: bold; font-size: 12px; padding: 8px; background: #e3f2fd; border-radius: 4px;">${phase.name}</div>`).join('')}
+                    </div>
+                    
+                    <!-- ヒートマップ本体 -->
+                    <div style="display: grid; grid-template-columns: 120px repeat(${phases.length}, 1fr); gap: 2px; width: 100%; max-width: 800px;">
+                        ${layers.map((layer, layerIndex) => {
+                            let rowHTML = `<div style="display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 11px; padding: 8px; background: #f5f5f5; border-radius: 4px; text-align: center;">${layer}</div>`;
+                            
+                            phases.forEach((phase, phaseIndex) => {
+                                const value = heatmapData[phaseIndex][layerIndex];
+                                const intensity = maxValue === 0 ? 0 : value / maxValue;
+                                const color = `rgba(255, ${Math.floor(255 - intensity * 200)}, ${Math.floor(255 - intensity * 200)}, 0.9)`;
+                                rowHTML += `<div class="heatmap-cell" style="background-color: ${color}; border: 1px solid #ddd;" title="${phase.name} - ${layer}: ${value}項目">${value}</div>`;
+                            });
+                            
+                            return rowHTML;
+                        }).join('')}
+                    </div>
+                    
+                    <!-- 凡例 -->
+                    <div style="display: flex; align-items: center; gap: 20px; margin-top: 10px;">
+                        <div style="display: flex; align-items: center; gap: 15px;">
+                            <span style="font-weight: bold; font-size: 14px;">項目数の密度:</span>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <div style="width: 20px; height: 20px; background-color: rgba(255, 255, 255, 0.9); border: 1px solid #ddd; border-radius: 3px;"></div>
+                                <span style="font-size: 12px;">0項目</span>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <div style="width: 20px; height: 20px; background-color: rgba(255, 128, 128, 0.9); border: 1px solid #ddd; border-radius: 3px;"></div>
+                                <span style="font-size: 12px;">中程度</span>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <div style="width: 20px; height: 20px; background-color: rgba(255, 55, 55, 0.9); border: 1px solid #ddd; border-radius: 3px;"></div>
+                                <span style="font-size: 12px;">${maxValue}項目（最大）</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 解釈ガイド -->
+                    <div style="background: #fff3cd; padding: 12px; border-radius: 8px; border: 1px solid #ffeaa7; margin-top: 10px; max-width: 800px;">
+                        <h5 style="margin: 0 0 8px 0; color: #856404;">💡 ヒートマップの活用方法</h5>
+                        <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: #856404;">
+                            <li><strong>赤い部分</strong>：そのフェーズで特に多くの項目が集中している領域 → 重要な時期・分野</li>
+                            <li><strong>白い部分</strong>：項目が少ない領域 → 見落としている可能性がある分野</li>
+                            <li><strong>縦の比較</strong>：各フェーズでどのレイヤーが活発かを確認</li>
+                            <li><strong>横の比較</strong>：時系列でどのフェーズが最も活動的かを確認</li>
+                        </ul>
+                    </div>
+                </div>
+            `;
+            
+            generateHeatmapInsights(heatmapData, phases, layers, maxValue);
+        }
+
+        function generateHeatmapInsights(heatmapData, phases, layers, maxValue) {
+            const insights = document.getElementById('heatmapInsights');
+            
+            // 最も密度の高いエリアを特定
+            let maxDensityPhase = 0;
+            let maxDensityLayer = 0;
+            let maxDensityValue = 0;
+            
+            // 最も密度の低いエリアを特定
+            let minDensityPhase = 0;
+            let minDensityLayer = 0;
+            let minDensityValue = Infinity;
+            
+            heatmapData.forEach((phaseData, phaseIndex) => {
+                phaseData.forEach((value, layerIndex) => {
+                    if (value > maxDensityValue) {
+                        maxDensityValue = value;
+                        maxDensityPhase = phaseIndex;
+                        maxDensityLayer = layerIndex;
+                    }
+                    if (value < minDensityValue) {
+                        minDensityValue = value;
+                        minDensityPhase = phaseIndex;
+                        minDensityLayer = layerIndex;
+                    }
+                });
+            });
+            
+            const totalItems = heatmapData.flat().reduce((sum, val) => sum + val, 0);
+            const avgDensity = totalItems / (phases.length * layers.length);
+            
+            // フェーズ別の合計を計算
+            const phaseTotals = heatmapData.map(phaseData => phaseData.reduce((sum, val) => sum + val, 0));
+            const maxPhaseIndex = phaseTotals.indexOf(Math.max(...phaseTotals));
+            const minPhaseIndex = phaseTotals.indexOf(Math.min(...phaseTotals));
+            
+            // レイヤー別の合計を計算
+            const layerTotals = layers.map((_, layerIndex) => 
+                heatmapData.reduce((sum, phaseData) => sum + phaseData[layerIndex], 0)
+            );
+            const maxLayerIndex = layerTotals.indexOf(Math.max(...layerTotals));
+            const minLayerIndex = layerTotals.indexOf(Math.min(...layerTotals));
+            
+            const balanceScore = maxDensityValue / (avgDensity || 1);
+            
+            insights.innerHTML = `
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                    <div style="background: #f8f9fa; padding: 12px; border-radius: 8px; border-left: 4px solid #28a745;">
+                        <h5 style="margin: 0 0 8px 0; color: #155724;">🔥 最も活発なエリア</h5>
+                        <p style="margin: 0; font-size: 14px;"><strong>${phases[maxDensityPhase].name}</strong> の <strong>${layers[maxDensityLayer]}</strong></p>
+                        <p style="margin: 4px 0 0 0; font-size: 13px; color: #6c757d;">${maxDensityValue}項目が登録されています</p>
+                    </div>
+                    <div style="background: #f8f9fa; padding: 12px; border-radius: 8px; border-left: 4px solid #ffc107;">
+                        <h5 style="margin: 0 0 8px 0; color: #856404;">❄️ 最も静かなエリア</h5>
+                        <p style="margin: 0; font-size: 14px;"><strong>${phases[minDensityPhase].name}</strong> の <strong>${layers[minDensityLayer]}</strong></p>
+                        <p style="margin: 4px 0 0 0; font-size: 13px; color: #6c757d;">${minDensityValue}項目しか登録されていません</p>
+                    </div>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                    <div style="background: #e3f2fd; padding: 12px; border-radius: 8px;">
+                        <h5 style="margin: 0 0 8px 0; color: #1565c0;">📊 フェーズ別分析</h5>
+                        <p style="margin: 0; font-size: 14px;"><strong>最も活発:</strong> ${phases[maxPhaseIndex].name} (${phaseTotals[maxPhaseIndex]}項目)</p>
+                        <p style="margin: 4px 0 0 0; font-size: 14px;"><strong>最も静か:</strong> ${phases[minPhaseIndex].name} (${phaseTotals[minPhaseIndex]}項目)</p>
+                    </div>
+                    <div style="background: #e8f5e8; padding: 12px; border-radius: 8px;">
+                        <h5 style="margin: 0 0 8px 0; color: #2e7d32;">🎯 レイヤー別分析</h5>
+                        <p style="margin: 0; font-size: 14px;"><strong>最も充実:</strong> ${layers[maxLayerIndex]} (${layerTotals[maxLayerIndex]}項目)</p>
+                        <p style="margin: 4px 0 0 0; font-size: 14px;"><strong>最も薄い:</strong> ${layers[minLayerIndex]} (${layerTotals[minLayerIndex]}項目)</p>
+                    </div>
+                </div>
+                
+                <div style="background: #fff3cd; padding: 12px; border-radius: 8px; border: 1px solid #ffeaa7;">
+                    <h5 style="margin: 0 0 8px 0; color: #856404;">💡 改善提案</h5>
+                    <ul style="margin: 0; padding-left: 20px; font-size: 14px; color: #856404;">
+                        ${balanceScore > 3 ? `<li><strong>項目分散の改善:</strong> ${phases[maxDensityPhase].name}の${layers[maxDensityLayer]}に集中しすぎています。他のエリアへの分散を検討してください。</li>` : ''}
+                        ${minDensityValue === 0 ? `<li><strong>空白エリアの補強:</strong> ${phases[minDensityPhase].name}の${layers[minDensityLayer]}が空白です。重要な要素が見落とされている可能性があります。</li>` : ''}
+                        ${phaseTotals[maxPhaseIndex] > avgDensity * phases.length * 1.5 ? `<li><strong>フェーズバランス:</strong> ${phases[maxPhaseIndex].name}への集中が目立ちます。他のフェーズも充実させることを検討してください。</li>` : ''}
+                        ${layerTotals[minLayerIndex] < totalItems * 0.1 ? `<li><strong>レイヤー強化:</strong> ${layers[minLayerIndex]}の項目が少なすぎます。この観点からの分析を強化してください。</li>` : ''}
+                    </ul>
+                </div>
+                
+                <div style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 8px; font-size: 13px;">
+                    <strong>📈 統計情報:</strong> 
+                    総項目数: ${totalItems}項目 | 
+                    平均密度: ${avgDensity.toFixed(1)}項目/エリア | 
+                    バランス度: ${balanceScore < 2 ? '良好' : balanceScore < 3 ? '普通' : '要改善'}
+                </div>
+            `;
+        }
+
+        function closeAnalysis() {
+            document.getElementById('analysisModal').style.display = 'none';
+        }
+
+        // 初期化処理は下のinitializeApp()で統一
+
+        // ドラッグ&ドロップ機能
+        let draggedElement = null;
+        let draggedData = null;
+        
+        // イベントリスナー管理
+        const EventManager = {
+            listeners: new Map(),
+            
+            add: function(element, event, handler, options = {}) {
+                if (!element || typeof handler !== 'function') {
+                    console.warn('Invalid event listener parameters');
+                    return;
+                }
+                
+                element.addEventListener(event, handler, options);
+                
+                // リスナーを追跡
+                if (!this.listeners.has(element)) {
+                    this.listeners.set(element, []);
+                }
+                this.listeners.get(element).push({ event, handler, options });
+            },
+            
+            removeAll: function(element) {
+                if (this.listeners.has(element)) {
+                    const elementListeners = this.listeners.get(element);
+                    elementListeners.forEach(({ event, handler, options }) => {
+                        element.removeEventListener(event, handler, options);
+                    });
+                    this.listeners.delete(element);
+                }
+            },
+            
+            cleanup: function() {
+                this.listeners.forEach((listeners, element) => {
+                    this.removeAll(element);
+                });
+                console.log('🧹 Event listeners cleaned up');
+            }
+        };
+
+        function initializeDragAndDrop() {
+            try {
+                // 既存のイベントリスナーをクリーンアップ
+                const draggableElements = document.querySelectorAll('.draggable');
+                console.log(`🧹 クリーンアップ対象: ${draggableElements.length}個の要素`);
+                
+                draggableElements.forEach(element => {
+                    EventManager.removeAll(element);
+                });
+                
+                // サイドバーのタッチポイント素材にドラッグ機能を追加
+                const sidebarItems = document.querySelectorAll('.touchpoint-item[data-type="touchpoint"]');
+                console.log(`📌 サイドバー素材: ${sidebarItems.length}個の要素`);
+                
+                sidebarItems.forEach(item => {
+                    if (!item) {
+                        console.warn('Sidebar item is null');
+                        return;
+                    }
+                    
+                    item.draggable = true;
+                    item.classList.add('draggable');
+                    
+                    EventManager.add(item, 'dragstart', function(e) {
+                        draggedElement = this;
+                        draggedData = {
+                            source: 'sidebar',
+                            type: 'touchpoint',
+                            title: DataHelper.getSafeString(this.textContent.trim()),
+                            description: `${DataHelper.getSafeString(this.textContent.trim())}に関連する体験`
+                        };
+                        
+                        this.classList.add('dragging');
+                        e.dataTransfer.effectAllowed = 'copy';
+                        e.dataTransfer.setData('text/html', this.outerHTML);
+                    });
+
+                    EventManager.add(item, 'dragend', function(e) {
+                        this.classList.remove('dragging');
+                        draggedElement = null;
+                        draggedData = null;
+                    });
+                });
+
+                // タイムライン内の項目にドラッグ機能を追加
+                const journeyItems = document.querySelectorAll('.journey-item.draggable');
+                console.log(`🗺️ タイムライン項目: ${journeyItems.length}個の要素`);
+                
+                journeyItems.forEach(item => {
+                    if (!item) {
+                        console.warn('Journey item is null');
+                        return;
+                    }
+                    
+                    EventManager.add(item, 'dragstart', function(e) {
+                        e.stopPropagation(); // 編集クリックイベントとの競合を防ぐ
+                        
+                        try {
+                            draggedElement = this;
+                            const layer = this.dataset.layer;
+                            const phase = parseInt(this.dataset.phase);
+                            const itemIndex = parseInt(this.dataset.itemIndex);
+                            
+                            // データの検証
+                            if (isNaN(phase) || isNaN(itemIndex) || !layer) {
+                                console.error('Invalid drag data:', { layer, phase, itemIndex });
+                                return;
+                            }
+                            
+                            if (!journeyData.phases[phase] || !journeyData.phases[phase][layer]) {
+                                console.error('Invalid phase or layer data');
+                                return;
+                            }
+                            
+                            const itemData = journeyData.phases[phase][layer][itemIndex];
+                            if (!itemData) {
+                                console.error('Item data not found');
+                                return;
+                            }
+                            
+                            draggedData = {
+                                source: 'timeline',
+                                layer: layer,
+                                phase: phase,
+                                itemIndex: itemIndex,
+                                item: itemData
+                            };
+                            
+                            this.classList.add('dragging');
+                            e.dataTransfer.effectAllowed = 'move';
+                            e.dataTransfer.setData('text/html', this.outerHTML);
+                        } catch (error) {
+                            console.error('Error in dragstart handler:', error);
+                        }
+                    });
+                    
+                    EventManager.add(item, 'dragend', function(e) {
+                        this.classList.remove('dragging');
+                        draggedElement = null;
+                        draggedData = null;
+                        
+                        // ドロップインジケーターをクリア
+                        document.querySelectorAll('.drop-indicator').forEach(indicator => {
+                            indicator.classList.remove('show');
+                        });
+                    });
+                });
+
+                // ドロップゾーンの設定
+                const dropZones = document.querySelectorAll('.drop-zone');
+                console.log(`🎯 ドロップゾーン: ${dropZones.length}個の要素`);
+                
+                dropZones.forEach(zone => {
+                    if (!zone) {
+                        console.warn('Drop zone is null');
+                        return;
+                    }
+                    
+                    EventManager.add(zone, 'dragover', function(e) {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = draggedData?.source === 'sidebar' ? 'copy' : 'move';
+                        
+                        this.classList.add('drag-over');
+                        
+                        // ドロップ位置のインジケーター表示
+                        if (draggedData?.source === 'timeline') {
+                            showDropIndicator(e, this);
+                        }
+                    });
+
+                    EventManager.add(zone, 'dragleave', function(e) {
+                        // 子要素への移動でない場合のみクラスを削除
+                        if (!this.contains(e.relatedTarget)) {
+                            this.classList.remove('drag-over');
+                            
+                            // ドロップインジケーターを非表示
+                            this.querySelectorAll('.drop-indicator').forEach(indicator => {
+                                indicator.classList.remove('show');
+                            });
+                        }
+                    });
+
+                    EventManager.add(zone, 'drop', function(e) {
+                        e.preventDefault();
+                        this.classList.remove('drag-over');
+                        
+                        const targetLayer = this.dataset.layer;
+                        const targetPhase = parseInt(this.dataset.phase);
+                        
+                        if (draggedData) {
+                            handleDrop(draggedData, targetLayer, targetPhase, e, this);
+                        }
+                        
+                        // ドロップインジケーターをクリア
+                        document.querySelectorAll('.drop-indicator').forEach(indicator => {
+                            indicator.classList.remove('show');
+                        });
+                    });
+                });
+                
+                console.log('✨ ドラッグ&ドロップ機能が初期化されました');
+                
+            } catch (error) {
+                console.error('Error in initializeDragAndDrop:', error);
+                console.error('Error details:', error.message, error.stack);
+                // エラーメッセージをより具体的に
+                alert(`ドラッグ&ドロップ機能の初期化中にエラーが発生しました。\n\n詳細: ${error.message}\n\nコンソールでより詳しい情報を確認できます。`);
+            }
+        }
+
+        function showDropIndicator(e, dropZone) {
+            const indicators = dropZone.querySelectorAll('.drop-indicator');
+            const items = dropZone.querySelectorAll('.journey-item');
+            
+            // 全てのインジケーターを一旦非表示
+            indicators.forEach(indicator => indicator.classList.remove('show'));
+            
+            if (items.length === 0) {
+                return; // アイテムがない場合は何もしない
+            }
+            
+            // マウス位置に最も近いアイテムを見つける
+            let closestItem = null;
+            let closestDistance = Infinity;
+            let insertAfter = false;
+            
+            items.forEach(item => {
+                const rect = item.getBoundingClientRect();
+                const itemCenter = rect.top + rect.height / 2;
+                const distance = Math.abs(e.clientY - itemCenter);
+                
+                if (distance < closestDistance) {
+                    closestDistance = distance;
+                    closestItem = item;
+                    insertAfter = e.clientY > itemCenter;
+                }
+            });
+            
+            if (closestItem) {
+                const indicator = insertAfter ? 
+                    closestItem.nextElementSibling : 
+                    closestItem.previousElementSibling;
+                
+                if (indicator && indicator.classList.contains('drop-indicator')) {
+                    indicator.classList.add('show');
+                }
+            }
+        }
+
+        function handleDrop(draggedData, targetLayer, targetPhase, event, dropZone) {
+            if (draggedData.source === 'sidebar') {
+                // サイドバーからのドロップ（新規追加）
+                if (targetLayer === 'touchpoints') {
+                    const newItem = {
+                        title: draggedData.title,
+                        description: draggedData.description
+                    };
+                    
+                    journeyData.phases[targetPhase][targetLayer].push(newItem);
+                    renderTimeline();
+                    // addTouchpointLibraryEvents(); // 削除 - 不要
+                    
+                    console.log(`Added "${draggedData.title}" to ${journeyData.phases[targetPhase].name} - ${targetLayer}`);
+                } else {
+                    alert('タッチポイント素材は「タッチポイント」レイヤーにのみドロップできます。');
+                }
+            } else if (draggedData.source === 'timeline') {
+                // タイムライン内での移動
+                const sourceLayer = draggedData.layer;
+                const sourcePhase = draggedData.phase;
+                const sourceIndex = draggedData.itemIndex;
+                
+                // 同じ位置への移動は無視
+                if (sourceLayer === targetLayer && sourcePhase === targetPhase) {
+                    return;
+                }
+                
+                // アイテムをコピー
+                const itemToMove = { ...draggedData.item };
+                
+                // 元の位置から削除
+                journeyData.phases[sourcePhase][sourceLayer].splice(sourceIndex, 1);
+                
+                // 新しい位置に追加
+                if (!journeyData.phases[targetPhase][targetLayer]) {
+                    journeyData.phases[targetPhase][targetLayer] = [];
+                }
+                
+                // ドロップ位置を計算
+                const dropPosition = calculateDropPosition(event, dropZone);
+                journeyData.phases[targetPhase][targetLayer].splice(dropPosition, 0, itemToMove);
+                
+                renderTimeline();
+                // addTouchpointLibraryEvents(); // 削除 - 不要
+                
+                console.log(`Moved "${itemToMove.title}" from ${journeyData.phases[sourcePhase].name}-${sourceLayer} to ${journeyData.phases[targetPhase].name}-${targetLayer}`);
+            }
+        }
+
+        function calculateDropPosition(event, dropZone) {
+            const items = dropZone.querySelectorAll('.journey-item');
+            
+            if (items.length === 0) {
+                return 0; // 空の場合は最初に挿入
+            }
+            
+            for (let i = 0; i < items.length; i++) {
+                const rect = items[i].getBoundingClientRect();
+                const itemCenter = rect.top + rect.height / 2;
+                
+                if (event.clientY < itemCenter) {
+                    return i; // このアイテムの前に挿入
+                }
+            }
+            
+            return items.length; // 最後に挿入
+        }
+
+        // タッチポイントライブラリのドラッグ&ドロップ機能を追加
+        function addTouchpointLibraryEvents() {
+            // 既存のイベントリスナーを削除してから新しいものを追加（重複防止）
+            const touchpointItems = document.querySelectorAll('.touchpoint-item[data-type="touchpoint"]');
+            const stageItems = document.querySelectorAll('.touchpoint-item[data-type="stage"]');
+            
+            // タッチポイント素材のクリックイベント
+            touchpointItems.forEach(item => {
+                // 既存のクリックイベントをクローンして置き換える（重複防止）
+                const newItem = item.cloneNode(true);
+                item.parentNode.replaceChild(newItem, item);
+                
+                // クリックイベントを追加
+                newItem.addEventListener('click', function() {
+                    const title = this.textContent.trim();
+                    
+                    // モーダルを開いて詳細入力（現在選択中のフェーズに追加）
+                    openAddModal('touchpoint', currentPhase);
+                    
+                    // モーダルタイトルを更新してフェーズ情報を表示
+                    const phaseName = journeyData.phases[currentPhase]?.name || 'フェーズ';
+                    document.getElementById('modalTitle').textContent = `${phaseName}にタッチポイントを追加`;
+                    
+                    // タイトルフィールドに素材名を事前入力
+                    document.getElementById('itemTitle').value = title;
+                    document.getElementById('itemDescription').value = `${title}に関連する体験や詳細を記述してください`;
+                });
+            });
+            
+            // 発達段階マーカーのクリックイベント
+            stageItems.forEach(item => {
+                // 既存のクリックイベントをクローンして置き換える（重複防止）
+                const newItem = item.cloneNode(true);
+                item.parentNode.replaceChild(newItem, item);
+                
+                // クリックイベントを追加
+                newItem.addEventListener('click', function() {
+                    const title = this.textContent.trim();
+                    
+                    // 思考レイヤーにマーカーを追加
+                    openAddModal('thought', currentPhase);
+                    
+                    // モーダルタイトルを更新してフェーズ情報を表示
+                    const phaseName = journeyData.phases[currentPhase]?.name || 'フェーズ';
+                    document.getElementById('modalTitle').textContent = `${phaseName}に思考・発達段階を追加`;
+                    
+                    // タイトルフィールドに段階名を事前入力
+                    document.getElementById('itemTitle').value = title;
+                    document.getElementById('itemDescription').value = `${title}に関連する思考や認識の変化を記述してください`;
+                    
+                    // 発達段階も事前選択
+                    const stageMapping = {
+                        '依存的段階': 'dependent',
+                        '探索段階': 'exploring',
+                        '主体性芽生え': 'authoring',
+                        'セルフオーサーシップ': 'authoring'
+                    };
+                    const stageValue = stageMapping[title] || 'exploring';
+                    document.getElementById('developmentStage').value = stageValue;
+                });
+            });
+        }
+
+        // Initialize
+        function initializeApp() {
+            try {
+                console.log('🚀 アプリケーション初期化を開始します...');
+                
+                // DOM要素の存在確認
+                const requiredElements = ['timeline', 'phaseList', 'journeyTitle'];
+                const missingElements = requiredElements.filter(id => !document.getElementById(id));
+                
+                if (missingElements.length > 0) {
+                    console.error('必要なDOM要素が見つかりません:', missingElements);
+                    alert('アプリケーションの初期化に失敗しました。ページを再読み込みしてください。');
+                    return;
+                }
+                
+                // 初期化順序を最適化
+                updatePhases(journeyData.timeRange);
+                renderTimeline();
+                updateTitle();
+                updatePhaseHelperText(); // ヘルプテキストを初期化
+                addTouchpointLibraryEvents(); // 初期化時にのみ必要
+                addPhaseClickEvents(); // フェーズクリックイベントも初期化
+                
+                console.log('🎉 学習ジャーニーマップツールが初期化されました');
+                console.log('✨ ドラッグ&ドロップ機能が有効になりました');
+                console.log('📝 タッチポイント素材クリック機能が有効になりました');
+                
+                // パフォーマンス測定
+                if (performance && performance.now) {
+                    const loadTime = performance.now();
+                    console.log(`⚡ 初期化完了時間: ${loadTime.toFixed(2)}ms`);
+                }
+                
+            } catch (error) {
+                console.error('アプリケーション初期化エラー:', error);
+                alert('アプリケーションの初期化中にエラーが発生しました。ページを再読み込みしてください。');
+            }
+        }
+
+        // DOM ready handler with improved error handling
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check for browser compatibility
+            if (typeof Map === 'undefined' || typeof Set === 'undefined') {
+                alert('ご利用のブラウザは対応していません。最新のブラウザをご利用ください。');
+                return;
+            }
+            
+            // Wait a moment for DOM to be fully ready
+            setTimeout(() => {
+                try {
+                    initializeApp();
+                } catch (error) {
+                    console.error('初期化処理でエラーが発生しました:', error);
+                    // Retry once after 1 second
+                    setTimeout(() => {
+                        try {
+                            console.log('初期化を再試行します...');
+                            initializeApp();
+                        } catch (retryError) {
+                            console.error('初期化の再試行に失敗しました:', retryError);
+                            alert('アプリケーションの初期化に失敗しました。ページを再読み込みしてください。');
+                        }
+                    }, 1000);
+                }
+            }, 100);
+        });
+        
+        // ページ終了時のクリーンアップ
+        window.addEventListener('beforeunload', function() {
+            try {
+                // イベントリスナーをクリーンアップ
+                EventManager.cleanup();
+                
+                // オートセーブ
+                if (localStorage && journeyData) {
+                    localStorage.setItem('journeyMapAutoSave', JSON.stringify(journeyData));
+                    console.log('💾 Auto-saved before page unload');
+                }
+                
+                // メモリリークの防止
+                draggedElement = null;
+                draggedData = null;
+                
+                console.log('🧹 Cleanup completed');
+            } catch (error) {
+                console.warn('Cleanup failed:', error);
+            }
+        });
+        
+        // エラーハンドリング: グローバルエラーキャッチ
+        window.addEventListener('error', function(event) {
+            console.error('グローバルエラー:', event.error);
+            console.error('ファイル:', event.filename, '行:', event.lineno);
+        });
+        
+        // Promise の unhandled rejection をキャッチ
+        window.addEventListener('unhandledrejection', function(event) {
+            console.error('Unhandled Promise Rejection:', event.reason);
+            event.preventDefault(); // ブラウザのデフォルトエラーハンドリングを防ぐ
+        });
+        
+        // デバッグ用ユーティリティ（開発者向け）
+        window.JourneyMapDebug = {
+            getData: () => journeyData,
+            getPerformance: () => PerformanceMonitor,
+            getEventListeners: () => EventManager.listeners,
+            validateData: () => DataHelper.validateJourneyData(),
+            clearCache: () => {
+                if (localStorage) {
+                    localStorage.removeItem('journeyMapAutoSave');
+                    console.log('Cache cleared');
+                }
+            }
+        };
+        // ===== セルフ・オーサーシップ理論分析システム =====
+        // 既存のjourney_map_builder.htmlに追加する機能モジュール
+
+        const SelfAuthorshipAnalyzer = {
+            // 発達段階の定義と指標
+            stageIndicators: {
+                // 外的定義段階（Following External Formulas）
+                dependent: {
+                    name: "外的定義段階",
+                    description: "他者の期待や外的権威に依存",
+                    keywords: [
+                        "他者の期待", "親の意見", "先生の評価", "正解探し", 
+                        "みんなと同じ", "普通", "常識", "言われた通り",
+                        "指示待ち", "承認欲求", "評価を気にする", "比較"
+                    ],
+                    emotionPatterns: ["negative", "neutral"], // 不安や混乱が多い
+                    thoughtPatterns: ["どうすればいいか", "正しい答えは", "他の人は"],
+                    behaviors: ["受動的", "依存的", "確認を求める"]
+                },
+                
+                // 十字路段階（Crossroads）
+                crossroads: {
+                    name: "十字路段階", 
+                    description: "外的価値観と内的価値観の葛藤",
+                    keywords: [
+                        "違和感", "疑問", "葛藤", "迷い", "モヤモヤ",
+                        "このままでいいのか", "自分の気持ち", "でも",
+                        "一方で", "揺れる", "矛盾", "わからない"
+                    ],
+                    emotionPatterns: ["negative", "neutral", "positive"], // 感情の揺れ
+                    thoughtPatterns: ["なぜ", "本当に", "自分は何を"],
+                    behaviors: ["探索的", "試行錯誤", "質問増加"]
+                },
+                
+                // 内的基盤段階（Self-Authoring）
+                authoring: {
+                    name: "内的基盤段階",
+                    description: "内的価値観に基づく判断",
+                    keywords: [
+                        "自分で決めた", "自分の価値観", "私は", "選択",
+                        "責任", "自分らしさ", "信念", "目的",
+                        "意味", "貢献", "成長", "主体的"
+                    ],
+                    emotionPatterns: ["positive", "neutral"], // 安定した感情
+                    thoughtPatterns: ["私にとって", "自分の経験から", "意味があるのは"],
+                    behaviors: ["主体的", "創造的", "リーダーシップ"]
+                },
+                
+                // 自己変革段階（Self-Transforming） - 発展的
+                transforming: {
+                    name: "自己変革段階",
+                    description: "複数の視点を統合し、柔軟に変化",
+                    keywords: [
+                        "多様な視点", "統合", "変化を受け入れる", "相互依存",
+                        "システム思考", "パラドックス", "both/and", "進化",
+                        "共創", "文脈依存", "メタ認知", "全体性"
+                    ],
+                    emotionPatterns: ["positive"], // 受容的で安定
+                    thoughtPatterns: ["異なる視点も", "文脈によって", "全体として"],
+                    behaviors: ["統合的", "適応的", "共創的"]
+                }
+            },
+
+            // ジャーニーデータから発達段階を分析
+            analyzeJourney: function(journeyData) {
+                const analysis = {
+                    overallStage: null,
+                    phaseAnalysis: [],
+                    developmentPath: [],
+                    keyIndicators: [],
+                    recommendations: []
+                };
+
+                // 各フェーズを分析
+                journeyData.phases.forEach((phase, index) => {
+                    const phaseResult = this.analyzePhase(phase, index);
+                    analysis.phaseAnalysis.push(phaseResult);
+                });
+
+                // 全体的な発達段階を判定
+                analysis.overallStage = this.determineOverallStage(analysis.phaseAnalysis);
+                
+                // 発達の軌跡を分析
+                analysis.developmentPath = this.traceDevelopmentPath(analysis.phaseAnalysis);
+                
+                // 主要な指標を抽出
+                analysis.keyIndicators = this.extractKeyIndicators(journeyData);
+                
+                // 支援の推奨事項を生成
+                analysis.recommendations = this.generateRecommendations(analysis);
+
+                return analysis;
+            },
+
+            // 単一フェーズの分析
+            analyzePhase: function(phase, phaseIndex) {
+                const scores = {
+                    dependent: 0,
+                    crossroads: 0,
+                    authoring: 0,
+                    transforming: 0
+                };
+
+                // テキストベースの分析
+                const allTexts = [
+                    ...phase.touchpoints.map(item => `${item.title} ${item.description || ''}`),
+                    ...phase.emotions.map(item => `${item.title} ${item.description || ''}`),
+                    ...phase.thoughts.map(item => `${item.title} ${item.description || ''}`),
+                    ...phase.needs.map(item => `${item.title} ${item.description || ''}`),
+                    ...phase.opportunities.map(item => `${item.title} ${item.description || ''}`)
+                ].join(' ').toLowerCase();
+
+                // キーワードマッチング
+                Object.entries(this.stageIndicators).forEach(([stage, indicators]) => {
+                    indicators.keywords.forEach(keyword => {
+                        if (allTexts.includes(keyword.toLowerCase())) {
+                            scores[stage] += 2;
+                        }
+                    });
+                });
+
+                // 感情パターン分析
+                phase.emotions.forEach(emotion => {
+                    Object.entries(this.stageIndicators).forEach(([stage, indicators]) => {
+                        if (indicators.emotionPatterns.includes(emotion.intensity)) {
+                            scores[stage] += 1;
+                        }
+                    });
+                });
+
+                // 思考パターン分析
+                phase.thoughts.forEach(thought => {
+                    if (thought.stage) {
+                        // 既存の段階指定を尊重
+                        const mappedStage = this.mapToDetailedStage(thought.stage);
+                        scores[mappedStage] += 3;
+                    }
+                });
+
+                // 行動パターン分析（タッチポイントから推測）
+                this.analyzeBehaviorPatterns(phase.touchpoints).forEach(pattern => {
+                    Object.entries(this.stageIndicators).forEach(([stage, indicators]) => {
+                        if (indicators.behaviors.includes(pattern)) {
+                            scores[stage] += 1.5;
+                        }
+                    });
+                });
+
+                // 最も高いスコアの段階を特定
+                const dominantStage = Object.entries(scores).reduce((a, b) => 
+                    scores[a[0]] > scores[b[0]] ? a : b
+                )[0];
+
+                // 発達の兆候を検出
+                const developmentSigns = this.detectDevelopmentSigns(phase, dominantStage);
+
+                return {
+                    phaseIndex,
+                    phaseName: phase.name,
+                    scores,
+                    dominantStage,
+                    confidence: this.calculateConfidence(scores),
+                    developmentSigns,
+                    criticalEvents: this.identifyCriticalEvents(phase)
+                };
+            },
+
+            // 既存の段階マッピング
+            mapToDetailedStage: function(simpleStage) {
+                const mapping = {
+                    'dependent': 'dependent',
+                    'exploring': 'crossroads',
+                    'authoring': 'authoring'
+                };
+                return mapping[simpleStage] || 'crossroads';
+            },
+
+            // 行動パターンの分析
+            analyzeBehaviorPatterns: function(touchpoints) {
+                const patterns = [];
+                
+                touchpoints.forEach(tp => {
+                    const text = `${tp.title} ${tp.description || ''}`.toLowerCase();
+                    
+                    if (text.includes('自ら') || text.includes('積極的') || text.includes('主体的')) {
+                        patterns.push('主体的');
+                    }
+                    if (text.includes('指示') || text.includes('言われ') || text.includes('従う')) {
+                        patterns.push('受動的');
+                    }
+                    if (text.includes('試し') || text.includes('探し') || text.includes('模索')) {
+                        patterns.push('探索的');
+                    }
+                    if (text.includes('創') || text.includes('新しい') || text.includes('オリジナル')) {
+                        patterns.push('創造的');
+                    }
+                });
+                
+                return patterns;
+            },
+
+            // 発達の兆候を検出
+            detectDevelopmentSigns: function(phase, currentStage) {
+                const signs = [];
+                
+                // 葛藤や疑問の存在をチェック
+                const hasConflict = phase.thoughts.some(t => 
+                    t.title.includes('迷') || t.title.includes('葛藤') || t.description?.includes('矛盾')
+                );
+                
+                // 自己決定の兆候
+                const hasSelfDecision = phase.touchpoints.some(tp => 
+                    tp.title.includes('自分で') || tp.description?.includes('決めた')
+                );
+                
+                // 質問や探索の増加
+                const hasQuestioning = phase.thoughts.filter(t => 
+                    t.title.includes('なぜ') || t.title.includes('どう')
+                ).length > 0;
+                
+                if (currentStage === 'dependent' && (hasConflict || hasQuestioning)) {
+                    signs.push({
+                        type: 'progression',
+                        description: '外的定義段階から十字路段階への移行の兆し',
+                        indicators: ['疑問の増加', '既存の枠組みへの違和感']
+                    });
+                }
+                
+                if (currentStage === 'crossroads' && hasSelfDecision) {
+                    signs.push({
+                        type: 'progression',
+                        description: '十字路段階から内的基盤段階への移行の兆し',
+                        indicators: ['自己決定の経験', '内的価値観の芽生え']
+                    });
+                }
+                
+                return signs;
+            },
+
+            // 重要なイベントの特定
+            identifyCriticalEvents: function(phase) {
+                const events = [];
+                
+                // 転換点となりうるタッチポイント
+                phase.touchpoints.forEach(tp => {
+                    if (this.isCriticalEvent(tp)) {
+                        events.push({
+                            type: 'touchpoint',
+                            item: tp,
+                            significance: this.assessSignificance(tp)
+                        });
+                    }
+                });
+                
+                // 強い感情体験
+                phase.emotions.forEach(emotion => {
+                    if (emotion.intensity === 'positive' || emotion.intensity === 'negative') {
+                        events.push({
+                            type: 'emotion',
+                            item: emotion,
+                            significance: 'high'
+                        });
+                    }
+                });
+                
+                return events;
+            },
+
+            // 重要イベントかどうかの判定
+            isCriticalEvent: function(touchpoint) {
+                const criticalKeywords = [
+                    '初めて', '転機', '気づき', '発見', '挫折', 
+                    '成功', '失敗', '出会い', '別れ', '決断'
+                ];
+                
+                const text = `${touchpoint.title} ${touchpoint.description || ''}`.toLowerCase();
+                return criticalKeywords.some(keyword => text.includes(keyword));
+            },
+
+            // 重要度の評価
+            assessSignificance: function(item) {
+                // 簡易的な重要度判定
+                const text = `${item.title} ${item.description || ''}`;
+                if (text.includes('初めて') || text.includes('大きな')) return 'high';
+                if (text.includes('少し') || text.includes('やや')) return 'low';
+                return 'medium';
+            },
+
+            // 信頼度の計算
+            calculateConfidence: function(scores) {
+                const total = Object.values(scores).reduce((sum, score) => sum + score, 0);
+                if (total === 0) return 0;
+                
+                const maxScore = Math.max(...Object.values(scores));
+                const confidence = (maxScore / total) * 100;
+                
+                return Math.round(confidence);
+            },
+
+            // 全体的な発達段階の判定
+            determineOverallStage: function(phaseAnalysis) {
+                // 最新フェーズの段階を重視しつつ、全体の傾向も考慮
+                const latestPhase = phaseAnalysis[phaseAnalysis.length - 1];
+                const allStages = phaseAnalysis.map(p => p.dominantStage);
+                
+                // 段階の進行をスコア化
+                const stageScores = {
+                    dependent: 1,
+                    crossroads: 2,
+                    authoring: 3,
+                    transforming: 4
+                };
+                
+                const avgScore = allStages.reduce((sum, stage) => 
+                    sum + stageScores[stage], 0) / allStages.length;
+                
+                // 最新の段階と平均を考慮
+                const latestScore = stageScores[latestPhase.dominantStage];
+                const weightedScore = (latestScore * 0.7) + (avgScore * 0.3);
+                
+                // スコアから段階を逆算
+                if (weightedScore >= 3.5) return 'transforming';
+                if (weightedScore >= 2.5) return 'authoring';
+                if (weightedScore >= 1.5) return 'crossroads';
+                return 'dependent';
+            },
+
+            // 発達の軌跡を追跡
+            traceDevelopmentPath: function(phaseAnalysis) {
+                const path = [];
+                
+                for (let i = 0; i < phaseAnalysis.length; i++) {
+                    const current = phaseAnalysis[i];
+                    const previous = i > 0 ? phaseAnalysis[i - 1] : null;
+                    
+                    path.push({
+                        phase: current.phaseName,
+                        stage: current.dominantStage,
+                        confidence: current.confidence,
+                        transition: previous ? this.analyzeTransition(previous, current) : null
+                    });
+                }
+                
+                return path;
+            },
+
+            // フェーズ間の移行を分析
+            analyzeTransition: function(previousPhase, currentPhase) {
+                const stageOrder = ['dependent', 'crossroads', 'authoring', 'transforming'];
+                const prevIndex = stageOrder.indexOf(previousPhase.dominantStage);
+                const currIndex = stageOrder.indexOf(currentPhase.dominantStage);
+                
+                if (currIndex > prevIndex) {
+                    return {
+                        type: 'progression',
+                        description: `${this.stageIndicators[previousPhase.dominantStage].name}から${this.stageIndicators[currentPhase.dominantStage].name}への発達`
+                    };
+                } else if (currIndex < prevIndex) {
+                    return {
+                        type: 'regression',
+                        description: '一時的な後退（新しい課題への直面の可能性）'
+                    };
+                } else {
+                    return {
+                        type: 'stable',
+                        description: '同じ発達段階の継続'
+                    };
+                }
+            },
+
+            // 主要な指標を抽出
+            extractKeyIndicators: function(journeyData) {
+                const indicators = [];
+                
+                // 全フェーズから重要な要素を収集
+                journeyData.phases.forEach(phase => {
+                    // 自己決定の経験
+                    const selfDecisions = phase.touchpoints.filter(tp => 
+                        tp.title.includes('自分で') || tp.description?.includes('決めた')
+                    );
+                    
+                    if (selfDecisions.length > 0) {
+                        indicators.push({
+                            type: 'self-decision',
+                            phase: phase.name,
+                            items: selfDecisions,
+                            significance: 'high'
+                        });
+                    }
+                    
+                    // 葛藤や疑問
+                    const conflicts = phase.thoughts.filter(t => 
+                        t.title.includes('迷い') || t.title.includes('葛藤')
+                    );
+                    
+                    if (conflicts.length > 0) {
+                        indicators.push({
+                            type: 'conflict',
+                            phase: phase.name,
+                            items: conflicts,
+                            significance: 'medium'
+                        });
+                    }
+                });
+                
+                return indicators;
+            },
+
+            // 支援の推奨事項を生成
+            generateRecommendations: function(analysis) {
+                const recommendations = [];
+                const currentStage = analysis.overallStage;
+                
+                // 現在の段階に応じた基本的な支援
+                const stageRecommendations = {
+                    dependent: [
+                        {
+                            category: '基本的支援',
+                            actions: [
+                                '安全な環境での小さな選択機会の提供',
+                                '成功体験の積み重ね',
+                                '明確な構造とガイダンスの提供'
+                            ]
+                        },
+                        {
+                            category: '発達促進',
+                            actions: [
+                                '「なぜ？」を問う機会の創出',
+                                '多様な視点に触れる経験',
+                                '自己の感情や思考の言語化支援'
+                            ]
+                        }
+                    ],
+                    crossroads: [
+                        {
+                            category: '葛藤の支援',
+                            actions: [
+                                '葛藤を肯定的に捉える視点の提供',
+                                '安全に試行錯誤できる環境',
+                                '内省の時間と空間の確保'
+                            ]
+                        },
+                        {
+                            category: '自己探索',
+                            actions: [
+                                '価値観を探る対話',
+                                '多様なロールモデルとの出会い',
+                                '自己決定の小さな練習'
+                            ]
+                        }
+                    ],
+                    authoring: [
+                        {
+                            category: '主体性の強化',
+                            actions: [
+                                '自己決定の機会の拡大',
+                                'リーダーシップ経験の提供',
+                                '創造的プロジェクトへの参加'
+                            ]
+                        },
+                        {
+                            category: '社会的貢献',
+                            actions: [
+                                '他者支援の機会創出',
+                                'メンタリング役割の提供',
+                                '社会的インパクトのある活動'
+                            ]
+                        }
+                    ],
+                    transforming: [
+                        {
+                            category: '統合的成長',
+                            actions: [
+                                '複雑な問題解決への挑戦',
+                                '異文化・異分野との協働',
+                                'システム思考の実践機会'
+                            ]
+                        }
+                    ]
+                };
+                
+                // 現在の段階に応じた推奨事項を追加
+                if (stageRecommendations[currentStage]) {
+                    recommendations.push(...stageRecommendations[currentStage]);
+                }
+                
+                // 次の段階への移行支援
+                const nextStageSupport = this.getNextStageSupport(currentStage, analysis);
+                if (nextStageSupport) {
+                    recommendations.push(nextStageSupport);
+                }
+                
+                // 個別の状況に応じた追加提案
+                const contextualRecommendations = this.getContextualRecommendations(analysis);
+                recommendations.push(...contextualRecommendations);
+                
+                return recommendations;
+            },
+
+            // 次の段階への移行支援
+            getNextStageSupport: function(currentStage, analysis) {
+                const transitions = {
+                    dependent: {
+                        category: '十字路段階への移行支援',
+                        actions: [
+                            '既存の枠組みへの健全な疑問を促す',
+                            '自分の感情や考えを安全に表現できる場',
+                            '失敗を学びと捉える文化の醸成'
+                        ]
+                    },
+                    crossroads: {
+                        category: '内的基盤段階への移行支援',
+                        actions: [
+                            '自己決定の成功体験を重ねる',
+                            '内的価値観を明確化する対話',
+                            '自己効力感を高める挑戦'
+                        ]
+                    },
+                    authoring: {
+                        category: '自己変革段階への移行支援',
+                        actions: [
+                            '多様な価値観との建設的な対話',
+                            'パラドックスを含む複雑な課題',
+                            'メタ認知能力の向上'
+                        ]
+                    }
+                };
+                
+                return transitions[currentStage] || null;
+            },
+
+            // 文脈に応じた推奨事項
+            getContextualRecommendations: function(analysis) {
+                const recommendations = [];
+                
+                // 停滞が見られる場合
+                const stagnantPhases = analysis.developmentPath.filter(p => 
+                    p.transition && p.transition.type === 'stable'
+                ).length;
+                
+                if (stagnantPhases > 2) {
+                    recommendations.push({
+                        category: '停滞打破の支援',
+                        actions: [
+                            '新しい挑戦や経験の機会提供',
+                            '現状への健全な不満足感の醸成',
+                            '異なる環境や人との出会い'
+                        ]
+                    });
+                }
+                
+                // 急激な変化がある場合
+                const hasRapidChange = analysis.developmentPath.some(p => 
+                    p.transition && p.transition.type === 'progression' && p.confidence < 50
+                );
+                
+                if (hasRapidChange) {
+                    recommendations.push({
+                        category: '変化の定着支援',
+                        actions: [
+                            '新しい段階での成功体験の確保',
+                            '変化を振り返る時間の提供',
+                            '継続的なサポート体制'
+                        ]
+                    });
+                }
+                
+                return recommendations;
+            },
+
+            // 分析結果の可視化用データ生成
+            generateVisualizationData: function(analysis) {
+                return {
+                    // レーダーチャート用データ
+                    radarData: {
+                        labels: Object.keys(this.stageIndicators).map(key => 
+                            this.stageIndicators[key].name
+                        ),
+                        datasets: analysis.phaseAnalysis.map((phase, index) => ({
+                            label: phase.phaseName,
+                            data: Object.keys(this.stageIndicators).map(stage => 
+                                phase.scores[stage] || 0
+                            ),
+                            borderColor: `hsl(${index * 90}, 70%, 50%)`,
+                            backgroundColor: `hsla(${index * 90}, 70%, 50%, 0.2)`
+                        }))
+                    },
+                    
+                    // 発達軌跡グラフ用データ
+                    pathData: {
+                        labels: analysis.developmentPath.map(p => p.phase),
+                        datasets: [{
+                            label: '発達段階',
+                            data: analysis.developmentPath.map(p => {
+                                const stageValues = {
+                                    dependent: 1,
+                                    crossroads: 2,
+                                    authoring: 3,
+                                    transforming: 4
+                                };
+                                return stageValues[p.stage];
+                            }),
+                            borderColor: '#4f46e5',
+                            backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                            tension: 0.3
+                        }]
+                    },
+                    
+                    // 信頼度データ
+                    confidenceData: analysis.phaseAnalysis.map(p => ({
+                        phase: p.phaseName,
+                        confidence: p.confidence,
+                        stage: this.stageIndicators[p.dominantStage].name
+                    }))
+                };
+            },
+
+            // HTMLレポートの生成
+            generateReport: function(analysis, journeyData) {
+                const reportHTML = `
+                    <div class="theory-analysis-report">
+                        <h2>🧠 セルフ・オーサーシップ発達分析レポート</h2>
+                        
+                        <div class="summary-section">
+                            <h3>📊 分析サマリー</h3>
+                            <div class="summary-grid">
+                                <div class="summary-card">
+                                    <div class="card-title">現在の発達段階</div>
+                                    <div class="card-value">${this.stageIndicators[analysis.overallStage].name}</div>
+                                    <div class="card-description">${this.stageIndicators[analysis.overallStage].description}</div>
+                                </div>
+                                
+                                <div class="summary-card">
+                                    <div class="card-title">発達の方向性</div>
+                                    <div class="card-value">${this.assessDevelopmentTrend(analysis)}</div>
+                                </div>
+                                
+                                <div class="summary-card">
+                                    <div class="card-title">主要な特徴</div>
+                                    <div class="card-value">${this.summarizeKeyFeatures(analysis)}</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="phase-detail-section">
+                            <h3>📈 フェーズ別詳細分析</h3>
+                            ${analysis.phaseAnalysis.map(phase => `
+                                <div class="phase-report">
+                                    <h4>${phase.phaseName}</h4>
+                                    <div class="stage-indicator ${phase.dominantStage}">
+                                        ${this.stageIndicators[phase.dominantStage].name} 
+                                        (信頼度: ${phase.confidence}%)
+                                    </div>
+                                    ${phase.developmentSigns.length > 0 ? `
+                                        <div class="development-signs">
+                                            <strong>発達の兆候:</strong>
+                                            ${phase.developmentSigns.map(sign => 
+                                                `<span class="sign">${sign.description}</span>`
+                                            ).join(', ')}
+                                        </div>
+                                    ` : ''}
+                                    ${phase.criticalEvents.length > 0 ? `
+                                        <div class="critical-events">
+                                            <strong>重要なイベント:</strong>
+                                            <ul>
+                                                ${phase.criticalEvents.map(event => 
+                                                    `<li>${event.item.title} (${event.significance})</li>`
+                                                ).join('')}
+                                            </ul>
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+                        
+                        <div class="recommendations-section">
+                            <h3>💡 支援の推奨事項</h3>
+                            ${analysis.recommendations.map(rec => `
+                                <div class="recommendation-category">
+                                    <h4>${rec.category}</h4>
+                                    <ul>
+                                        ${rec.actions.map(action => `<li>${action}</li>`).join('')}
+                                    </ul>
+                                </div>
+                            `).join('')}
+                        </div>
+                        
+                        <div class="theoretical-notes">
+                            <h3>📚 理論的背景</h3>
+                            <p>この分析は、Marcia Baxter MagoldaとRobert Keganのセルフ・オーサーシップ理論に基づいています。
+                            学生の認識論的発達、対人関係の発達、内的自己の発達を統合的に捉え、
+                            外的権威への依存から内的基盤に基づく判断への移行プロセスを可視化しています。</p>
+                            
+                            <div class="theory-references">
+                                <h4>参考文献</h4>
+                                <ul>
+                                    <li>Baxter Magolda, M. B. (2001). Making their own way: Narratives for transforming higher education to promote self-development.</li>
+                                    <li>Kegan, R. (1994). In over our heads: The mental demands of modern life.</li>
+                                    <li>河井亨 (2014). 大学生の学習と発達に関するセルフ・オーサーシップ理論の展開</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <style>
+                        .theory-analysis-report {
+                            padding: 20px;
+                            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                        }
+                        
+                        .summary-grid {
+                            display: grid;
+                            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+                            gap: 20px;
+                            margin: 20px 0;
+                        }
+                        
+                        .summary-card {
+                            background: #f8fafc;
+                            padding: 20px;
+                            border-radius: 10px;
+                            border-left: 4px solid #4f46e5;
+                        }
+                        
+                        .card-title {
+                            font-size: 14px;
+                            color: #64748b;
+                            margin-bottom: 8px;
+                        }
+                        
+                        .card-value {
+                            font-size: 24px;
+                            font-weight: bold;
+                            color: #1e293b;
+                            margin-bottom: 8px;
+                        }
+                        
+                        .card-description {
+                            font-size: 14px;
+                            color: #475569;
+                        }
+                        
+                        .phase-report {
+                            background: #ffffff;
+                            border: 1px solid #e2e8f0;
+                            border-radius: 8px;
+                            padding: 20px;
+                            margin-bottom: 16px;
+                        }
+                        
+                        .stage-indicator {
+                            display: inline-block;
+                            padding: 6px 12px;
+                            border-radius: 20px;
+                            font-size: 14px;
+                            font-weight: 600;
+                            margin: 10px 0;
+                        }
+                        
+                        .stage-indicator.dependent {
+                            background: #fee2e2;
+                            color: #991b1b;
+                        }
+                        
+                        .stage-indicator.crossroads {
+                            background: #fef3c7;
+                            color: #92400e;
+                        }
+                        
+                        .stage-indicator.authoring {
+                            background: #dbeafe;
+                            color: #1e40af;
+                        }
+                        
+                        .stage-indicator.transforming {
+                            background: #e0e7ff;
+                            color: #3730a3;
+                        }
+                        
+                        .development-signs {
+                            margin: 10px 0;
+                            padding: 10px;
+                            background: #f0fdf4;
+                            border-radius: 6px;
+                            font-size: 14px;
+                        }
+                        
+                        .sign {
+                            display: inline-block;
+                            background: #86efac;
+                            color: #166534;
+                            padding: 2px 8px;
+                            border-radius: 12px;
+                            font-size: 12px;
+                            margin: 2px;
+                        }
+                        
+                        .critical-events {
+                            margin: 10px 0;
+                            font-size: 14px;
+                        }
+                        
+                        .recommendation-category {
+                            background: #f8fafc;
+                            padding: 16px;
+                            border-radius: 8px;
+                            margin-bottom: 12px;
+                        }
+                        
+                        .recommendation-category h4 {
+                            color: #1e293b;
+                            margin-bottom: 8px;
+                        }
+                        
+                        .recommendation-category ul {
+                            margin-left: 20px;
+                            color: #475569;
+                        }
+                        
+                        .theoretical-notes {
+                            background: #fefce8;
+                            padding: 20px;
+                            border-radius: 8px;
+                            margin-top: 30px;
+                            border: 1px solid #fde047;
+                        }
+                        
+                        .theory-references {
+                            margin-top: 16px;
+                            font-size: 13px;
+                        }
+                        
+                        .theory-references ul {
+                            margin-left: 20px;
+                            color: #475569;
+                        }
+                    </style>
+                `;
+                
+                return reportHTML;
+            },
+
+            // 発達傾向の評価
+            assessDevelopmentTrend: function(analysis) {
+                const progressions = analysis.developmentPath.filter(p => 
+                    p.transition && p.transition.type === 'progression'
+                ).length;
+                
+                const regressions = analysis.developmentPath.filter(p => 
+                    p.transition && p.transition.type === 'regression'
+                ).length;
+                
+                if (progressions > regressions * 2) return '順調な発達';
+                if (progressions > regressions) return '緩やかな発達';
+                if (regressions > progressions) return '停滞・揺り戻し';
+                return '安定維持';
+            },
+
+            // 主要な特徴の要約
+            summarizeKeyFeatures: function(analysis) {
+                const features = [];
+                
+                // 最も多い段階
+                const stageCounts = {};
+                analysis.phaseAnalysis.forEach(p => {
+                    stageCounts[p.dominantStage] = (stageCounts[p.dominantStage] || 0) + 1;
+                });
+                
+                const dominantPattern = Object.entries(stageCounts)
+                    .sort((a, b) => b[1] - a[1])[0];
+                
+                if (dominantPattern) {
+                    features.push(`${this.stageIndicators[dominantPattern[0]].name}が中心`);
+                }
+                
+                // 変化の特徴
+                if (analysis.developmentPath.some(p => p.transition?.type === 'progression')) {
+                    features.push('発達的変化あり');
+                }
+                
+                // 葛藤の存在
+                if (analysis.keyIndicators.some(i => i.type === 'conflict')) {
+                    features.push('健全な葛藤を経験');
+                }
+                
+                return features.join('、');
+            }
+        };
+
+        // 既存のツールに統合するための関数
+        function integrateTheoryAnalysis() {
+            // 分析ボタンを追加（既存のボタン群の後に）
+            const exportSection = document.querySelector('.export-buttons');
+            if (exportSection) {
+                const theoryButton = document.createElement('button');
+                theoryButton.className = 'btn btn-primary';
+                theoryButton.innerHTML = '🧠 理論的分析を実行';
+                theoryButton.onclick = performTheoryAnalysis;
+                exportSection.appendChild(theoryButton);
+            }
+            
+            // 可視化セクションに理論分析タブを追加
+            const chartTabs = document.querySelector('.chart-tabs');
+            if (chartTabs) {
+                const theoryTab = document.createElement('button');
+                theoryTab.className = 'tab-btn';
+                theoryTab.innerHTML = '🧠 発達分析';
+                theoryTab.onclick = () => switchChart('theory');
+                chartTabs.appendChild(theoryTab);
+            }
+        }
+
+        // 理論的分析の実行
+        function performTheoryAnalysis() {
+            // 現在のジャーニーデータを分析
+            const analysis = SelfAuthorshipAnalyzer.analyzeJourney(journeyData);
+            
+            // レポートを生成
+            const report = SelfAuthorshipAnalyzer.generateReport(analysis, journeyData);
+            
+            // モーダルで表示
+            const modal = document.createElement('div');
+            modal.className = 'modal';
+            modal.style.display = 'flex';
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width: 900px; max-height: 90vh; overflow-y: auto;">
+                    ${report}
+                    <div class="modal-actions" style="margin-top: 20px;">
+                        <button class="btn btn-primary" onclick="navigator.clipboard.writeText(this.closest('.modal-content').innerText).then(() => alert('レポートをコピーしました！'))">📋 レポートをコピー</button>
+                        <button class="btn btn-secondary" onclick="this.closest('.modal').remove()">閉じる</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            
+            // 分析結果を保存（他の機能で使用可能）
+            window.lastTheoryAnalysis = analysis;
+        }
+
+        // ページ読み込み時に統合
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', integrateTheoryAnalysis);
+        } else {
+            integrateTheoryAnalysis();
+        }
+    </script>
+</body>
+</html>
